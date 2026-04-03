@@ -1,0 +1,26 @@
+{
+  "role": "admin",
+  "label": "System Administrator",
+  "description": "Full system access including user management, period close, backup/restore, and all accounting functions",
+  "permissions": {
+    "users": ["create", "read", "update", "delete", "lock", "unlock", "reset_password", "assign_role"],
+    "coa": ["create", "read", "update", "deactivate"],
+    "contributions": ["create", "read", "update", "post", "reverse", "delete_draft"],
+    "journals": ["create", "read", "update", "post", "reverse", "delete_draft"],
+    "bank_reconciliation": ["create", "read", "update", "reconcile"],
+    "reports": ["run_all", "export_pdf", "export_csv"],
+    "utilities": ["backup", "restore", "view_audit_log", "period_close", "year_end_close"],
+    "accounts_payable": ["create", "read", "update", "post", "pay"],
+    "accounts_receivable": ["create", "read", "update", "post", "receive"]
+  },
+  "ui_access": {
+    "sidebar_items": ["dashboard", "coa", "contributions", "journals", "ap", "ar", "bank_rec", "reports", "payroll", "settings", "backup", "restore", "audit_log", "user_management"],
+    "can_see_all_districts": true,
+    "can_delete_drafts": true
+  },
+  "security": {
+    "session_timeout_minutes": 30,
+    "requires_2fa": true,
+    "can_unlock_accounts": true
+  }
+}

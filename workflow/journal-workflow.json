@@ -1,0 +1,52 @@
+{
+  "name": "Journal Entry Workflow",
+  "version": "1.0",
+  "description": "Controls double-entry journal entries from draft to posted, with reversal support",
+  "states": ["draft", "posted", "reversed"],
+  "initial_state": "draft",
+  "transitions": {
+    "draft→posted": {
+      "label": "Post Journal Entry",
+      "roles_allowed": ["admin", "accountant"],
+      "requires": [
+        "has_at_least_two_lines",
+        "debits_equal_credits",
+        "all_accounts_active_detail",
+        "date_set",
+        "description_set"
+      ],
+      "side_effects": ["set_posted_at", "set_posted_by", "write_audit_log", "update_account_balances"]
+    },
+    "posted→reversed": {
+      "label": "Reverse Journal Entry",
+      "roles_allowed": ["admin"],
+      "creates_reversal_entry": true,
+      "reversal_logic": "negate_all_line_amounts_swap_dc",
+      "side_effects": ["create_reversal_journal", "link_reversal_of", "write_audit_log"]
+    }
+  },
+  "validation_rules": [
+    { "id": "has_at_least_two_lines", "message": "A journal entry must have at least two lines" },
+    { "id": "debits_equal_credits", "message": "Total debits must equal total credits" },
+    { "id": "all_accounts_active_detail", "message": "All account codes must be active Detail accounts" },
+    { "id": "date_set", "message": "Journal date is required" },
+    { "id": "description_set", "message": "Journal description is required" }
+  ],
+  "line_fields": {
+    "required": ["account_code", "dc", "amount"],
+    "optional": ["description"]
+  },
+  "types": {
+    "JE": "General Journal Entry",
+    "CR": "Cash Receipt",
+    "CD": "Cash Disbursement",
+    "AP": "Accounts Payable",
+    "AR": "Accounts Receivable",
+    "BR": "Bank Reconciliation Adjustment"
+  },
+  "edit_rules": {
+    "draft": "fully_editable",
+    "posted": "read_only_reverse_to_amend",
+    "reversed": "read_only"
+  }
+}

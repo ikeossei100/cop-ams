@@ -1,0 +1,30 @@
+{
+  "role": "viewer",
+  "label": "Read-Only Viewer",
+  "description": "Read-only access to reports and existing records. Cannot create, edit, or post anything.",
+  "permissions": {
+    "users": ["read_own_profile"],
+    "coa": ["read"],
+    "contributions": ["read"],
+    "journals": ["read"],
+    "bank_reconciliation": ["read"],
+    "reports": ["run_all", "export_pdf", "export_csv"],
+    "utilities": [],
+    "accounts_payable": ["read"],
+    "accounts_receivable": ["read"]
+  },
+  "ui_access": {
+    "sidebar_items": ["dashboard", "coa", "contributions", "journals", "reports"],
+    "can_see_all_districts": true,
+    "can_delete_drafts": false,
+    "create_button_visible": false,
+    "edit_button_visible": false,
+    "post_button_visible": false,
+    "reverse_button_visible": false
+  },
+  "security": {
+    "session_timeout_minutes": 30,
+    "requires_2fa": false,
+    "can_unlock_accounts": false
+  }
+}

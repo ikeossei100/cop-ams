@@ -1,0 +1,67 @@
+{
+  "name": "Period Close Workflow",
+  "version": "1.0",
+  "description": "End-of-month / end-of-year period close process",
+  "steps": [
+    {
+      "step": 1,
+      "id": "pre_close_checklist",
+      "label": "Pre-Close Checklist",
+      "checks": [
+        "all_contributions_posted",
+        "all_journals_posted",
+        "bank_reconciliation_completed",
+        "trial_balance_balanced"
+      ]
+    },
+    {
+      "step": 2,
+      "id": "run_trial_balance",
+      "label": "Run Trial Balance",
+      "description": "Generate and review trial balance to confirm debits = credits",
+      "output": "trial_balance_report"
+    },
+    {
+      "step": 3,
+      "id": "run_income_statement",
+      "label": "Run Income Statement",
+      "description": "Generate Income Statement for the period",
+      "output": "income_statement_report"
+    },
+    {
+      "step": 4,
+      "id": "run_balance_sheet",
+      "label": "Run Balance Sheet",
+      "description": "Generate Balance Sheet as of period end",
+      "output": "balance_sheet_report"
+    },
+    {
+      "step": 5,
+      "id": "backup_data",
+      "label": "Backup Data",
+      "description": "Download full database backup before closing",
+      "roles_allowed": ["admin"]
+    },
+    {
+      "step": 6,
+      "id": "close_period",
+      "label": "Close Period",
+      "description": "Lock all transactions for the closed period from further editing",
+      "roles_allowed": ["admin"],
+      "side_effects": [
+        "set_period_closed_flag",
+        "write_audit_log",
+        "prevent_posting_to_closed_period"
+      ]
+    }
+  ],
+  "year_end_additional_steps": [
+    {
+      "step": 7,
+      "id": "close_income_expense",
+      "label": "Close Income & Expense Accounts",
+      "description": "Journal entry to zero income/expense accounts into Fund Balance (3001)",
+      "creates": "closing_journal_entry"
+    }
+  ]
+}

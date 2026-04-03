@@ -1,0 +1,28 @@
+{
+  "role": "dataentry",
+  "label": "Data Entry Clerk",
+  "description": "Can create and save draft contributions and journal entries. Cannot post, reverse, or access reports/utilities.",
+  "permissions": {
+    "users": ["read_own_profile"],
+    "coa": ["read"],
+    "contributions": ["create", "read", "update_own_drafts"],
+    "journals": ["create", "read", "update_own_drafts"],
+    "bank_reconciliation": [],
+    "reports": ["run_contribution_list"],
+    "utilities": [],
+    "accounts_payable": ["create", "read"],
+    "accounts_receivable": ["create", "read"]
+  },
+  "ui_access": {
+    "sidebar_items": ["dashboard", "contributions", "journals", "ap", "ar"],
+    "can_see_all_districts": false,
+    "can_delete_drafts": false,
+    "post_button_visible": false,
+    "reverse_button_visible": false
+  },
+  "security": {
+    "session_timeout_minutes": 30,
+    "requires_2fa": false,
+    "can_unlock_accounts": false
+  }
+}

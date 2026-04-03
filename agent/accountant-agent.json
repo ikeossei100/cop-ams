@@ -1,0 +1,26 @@
+{
+  "role": "accountant",
+  "label": "Accountant",
+  "description": "Full accounting access including posting, reversals, and all reports. Cannot manage users or restore database.",
+  "permissions": {
+    "users": ["read_own_profile"],
+    "coa": ["create", "read", "update", "deactivate"],
+    "contributions": ["create", "read", "update", "post", "reverse", "delete_draft"],
+    "journals": ["create", "read", "update", "post", "reverse", "delete_draft"],
+    "bank_reconciliation": ["create", "read", "update", "reconcile"],
+    "reports": ["run_all", "export_pdf", "export_csv"],
+    "utilities": ["backup", "view_audit_log"],
+    "accounts_payable": ["create", "read", "update", "post", "pay"],
+    "accounts_receivable": ["create", "read", "update", "post", "receive"]
+  },
+  "ui_access": {
+    "sidebar_items": ["dashboard", "coa", "contributions", "journals", "ap", "ar", "bank_rec", "reports", "backup", "audit_log"],
+    "can_see_all_districts": true,
+    "can_delete_drafts": true
+  },
+  "security": {
+    "session_timeout_minutes": 30,
+    "requires_2fa": false,
+    "can_unlock_accounts": false
+  }
+}

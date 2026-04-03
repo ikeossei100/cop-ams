@@ -1,0 +1,36 @@
+{
+  "name": "Contribution Entry Workflow",
+  "version": "1.0",
+  "description": "Controls the lifecycle of a contribution record from draft to posted",
+  "states": ["draft", "posted", "reversed"],
+  "initial_state": "draft",
+  "transitions": {
+    "draft→posted": {
+      "label": "Post Contribution",
+      "roles_allowed": ["admin", "accountant"],
+      "requires": ["amount_greater_than_zero", "account_code_set", "date_set", "account_is_active_detail"],
+      "side_effects": ["set_posted_at", "set_posted_by", "write_audit_log", "update_ledger_balance"]
+    },
+    "posted→reversed": {
+      "label": "Reverse Contribution",
+      "roles_allowed": ["admin"],
+      "creates_reversal_entry": true,
+      "side_effects": ["create_negative_mirror", "link_reversal_of", "write_audit_log"]
+    }
+  },
+  "validation_rules": [
+    { "id": "amount_greater_than_zero", "message": "Amount must be greater than zero" },
+    { "id": "account_code_set", "message": "An account code must be selected" },
+    { "id": "date_set", "message": "Transaction date is required" },
+    { "id": "account_is_active_detail", "message": "Account must be an active Detail-type account" }
+  ],
+  "fields": {
+    "required": ["date", "account_code", "amount"],
+    "optional": ["ref_no", "district", "category", "description", "notes"]
+  },
+  "edit_rules": {
+    "draft": "fully_editable",
+    "posted": "read_only_reverse_to_amend",
+    "reversed": "read_only"
+  }
+}

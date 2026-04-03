@@ -1,0 +1,54 @@
+{
+  "name": "Bank Reconciliation Workflow",
+  "version": "1.0",
+  "description": "Step-by-step process to reconcile book balances against bank statements",
+  "states": ["open", "reconciled"],
+  "initial_state": "open",
+  "steps": [
+    {
+      "step": 1,
+      "id": "select_period",
+      "label": "Select Bank Account & Period",
+      "description": "Choose the bank account (COA code) and statement period end date",
+      "inputs": ["bank_account_code", "period_date", "statement_balance"]
+    },
+    {
+      "step": 2,
+      "id": "load_book_transactions",
+      "label": "Load Book Transactions",
+      "description": "Pull all posted journal lines for the bank account up to period date",
+      "source": "journals.lines where account_code = bank_account AND posted = true AND date <= period_date"
+    },
+    {
+      "step": 3,
+      "id": "match_items",
+      "label": "Mark Cleared Items",
+      "description": "Tick each book transaction that appears on the bank statement",
+      "actions": ["mark_cleared", "unmark_cleared"]
+    },
+    {
+      "step": 4,
+      "id": "enter_bank_only_items",
+      "label": "Enter Bank-Only Items",
+      "description": "Add items on the bank statement not yet in the books (bank charges, interest)",
+      "creates": "journal entries of type BR"
+    },
+    {
+      "step": 5,
+      "id": "verify_balance",
+      "label": "Verify Reconciliation",
+      "description": "Adjusted book balance must equal adjusted bank balance",
+      "formula": "bank_statement_balance - outstanding_withdrawals + deposits_in_transit = book_balance + unrecorded_items",
+      "completion_condition": "difference == 0"
+    },
+    {
+      "step": 6,
+      "id": "finalize",
+      "label": "Finalize & Print Report",
+      "description": "Lock the reconciliation and produce the reconciliation statement",
+      "roles_allowed": ["admin", "accountant"],
+      "outputs": ["bank_rec_report_pdf", "status_set_to_reconciled"]
+    }
+  ],
+  "cash_account_codes": ["1091", "1092", "1110", "1113", "1115", "1121"]
+}
