@@ -3643,7 +3643,7 @@ function parseImportFile(tab) {
         if(typeof XLSX==='undefined'){toast('Excel library not loaded. Please save the file as CSV and try again.','error');return;}
         const wb=XLSX.read(e.target.result,{type:'array'});
         const ws=wb.Sheets[wb.SheetNames[0]];
-        rows=XLSX.utils.sheet_to_array(ws,{defval:''}).map(r=>r.map(c=>String(c===null||c===undefined?'':c).trim()));
+        rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''}).map(r=>r.map(c=>String(c===null||c===undefined?'':c).trim()));
       }
       if(rows.length<2){toast('File appears empty. Make sure it has a header row and at least one data row.','error');return;}
       importHeaders[tab]=rows[0].map(h=>h.trim());
