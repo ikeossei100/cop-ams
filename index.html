@@ -9,7 +9,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
 <script>
@@ -3623,14 +3623,13 @@ function parseImportFile(tab) {
   }
   toast('Reading file — please wait…','info');
   if(ext==='pdf') { parsePDFImportFile(tab, file); return; }
-  const reader=new FileReader();
-  reader.onerror=function(){ toast('Could not read the file. Try saving it as CSV and re-uploading.','error'); };
-  reader.onload=function(e){
-    try {
-      let rows=[];
-      if(ext==='csv'){
+  if(ext==='csv'){
+    const reader=new FileReader();
+    reader.onerror=function(){ toast('Could not read the CSV file.','error'); };
+    reader.onload=function(e){
+      try {
         const text=e.target.result;
-        rows=text.trim().split(/\r?\n/).map(line=>{
+        const rows=text.trim().split(/\r?\n/).map(line=>{
           const r=[]; let cur='',inQ=false;
           for(let i=0;i<line.length;i++){
             if(line[i]==='"'){inQ=!inQ;}
@@ -3639,23 +3638,38 @@ function parseImportFile(tab) {
           }
           r.push(cur.trim()); return r;
         });
-      } else {
-        if(typeof XLSX==='undefined'){toast('Excel library not loaded. Please save the file as CSV and try again.','error');return;}
-        const wb=XLSX.read(e.target.result,{type:'array'});
-        const ws=wb.Sheets[wb.SheetNames[0]];
-        rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''}).map(r=>r.map(c=>String(c===null||c===undefined?'':c).trim()));
-      }
-      if(rows.length<2){toast('File appears empty. Make sure it has a header row and at least one data row.','error');return;}
-      importHeaders[tab]=rows[0].map(h=>h.trim());
-      importRawRows[tab]=rows.slice(1).filter(r=>r.some(c=>c.toString().trim()!==''));
-      if(!importRawRows[tab].length){toast('No data rows found in the file. Check that the file is not blank after the header row.','error');return;}
-      showColumnMapper(tab);
-    } catch(err) {
-      toast('Error reading file: '+err.message+'. Try saving as CSV.','error');
+        if(rows.length<2){toast('File appears empty. Make sure it has a header row and at least one data row.','error');return;}
+        importHeaders[tab]=rows[0].map(h=>h.trim());
+        importRawRows[tab]=rows.slice(1).filter(r=>r.some(c=>c.toString().trim()!==''));
+        if(!importRawRows[tab].length){toast('No data rows found after the header row.','error');return;}
+        showColumnMapper(tab);
+      } catch(err){ toast('CSV parse error: '+err.message,'error'); }
+    };
+    reader.readAsText(file);
+  } else {
+    // Excel — read as binary string which works more reliably across browsers
+    if(typeof XLSX==='undefined'){
+      toast('Excel library not loaded. Please refresh the page and try again, or save the file as CSV.','error');
+      return;
     }
-  };
-  if(ext==='csv') reader.readAsText(file);
-  else reader.readAsArrayBuffer(file);
+    const reader=new FileReader();
+    reader.onerror=function(){ toast('Could not read the Excel file.','error'); };
+    reader.onload=function(e){
+      try {
+        const wb=XLSX.read(e.target.result,{type:'binary'});
+        if(!wb.SheetNames||!wb.SheetNames.length){toast('No sheets found in the Excel file.','error');return;}
+        const ws=wb.Sheets[wb.SheetNames[0]];
+        const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:'',raw:false})
+          .map(r=>Array.isArray(r)?r.map(c=>String(c??'').trim()):[]);
+        if(rows.length<2){toast('Excel file appears empty. Make sure it has a header row and at least one data row.','error');return;}
+        importHeaders[tab]=rows[0].map(h=>h.trim());
+        importRawRows[tab]=rows.slice(1).filter(r=>r.some(c=>c.toString().trim()!==''));
+        if(!importRawRows[tab].length){toast('No data rows found after the header row.','error');return;}
+        showColumnMapper(tab);
+      } catch(err){ toast('Excel read error: '+err.message,'error'); console.error('Excel error:',err); }
+    };
+    reader.readAsBinaryString(file);
+  }
 }
 
 // ── PDF import: extract text with positions, reconstruct table rows ──
