@@ -784,7 +784,7 @@ tailwind.config = {
     <div class="flex items-center justify-between mb-4">
       <div>
         <h3 class="font-semibold text-gray-800 text-sm">Import Opening Balances</h3>
-        <p class="text-xs text-gray-500 mt-0.5">Upload a file exported from your previous software. Supported formats: <strong>CSV, Excel (.xlsx/.xls)</strong></p>
+        <p class="text-xs text-gray-500 mt-0.5">Upload a file exported from your previous software. Supported formats: <strong>CSV, Excel (.xlsx/.xls) or PDF</strong></p>
       </div>
       <button onclick="hideImportPanel()" class="text-gray-400 hover:text-gray-600 text-lg font-bold">&times;</button>
     </div>
@@ -817,7 +817,7 @@ tailwind.config = {
             <input type="text" id="imp-tb-source" class="form-input" placeholder="e.g. Power Church v15">
           </div>
           <div>
-            <label class="form-label">Upload File (CSV or Excel) *</label>
+            <label class="form-label">Upload File (CSV, Excel or PDF) *</label>
             <input type="file" id="imp-tb-file" accept=".csv,.xlsx,.xls,.pdf" class="form-input text-xs" onchange="parseImportFile('tb')">
           </div>
         </div>
@@ -920,7 +920,7 @@ tailwind.config = {
             <input type="text" id="imp-is-source" class="form-input" placeholder="e.g. Power Church v15">
           </div>
           <div>
-            <label class="form-label">Upload File (CSV or Excel) *</label>
+            <label class="form-label">Upload File (CSV, Excel or PDF) *</label>
             <input type="file" id="imp-is-file" accept=".csv,.xlsx,.xls,.pdf" class="form-input text-xs" onchange="parseImportFile('is')">
           </div>
         </div>
@@ -954,6 +954,20 @@ tailwind.config = {
 
     <!-- Result message -->
     <div id="imp-result" style="display:none;" class="mt-4 p-4 rounded-lg border"></div>
+  </div>
+
+  <!-- ── Imported Records Manager ── -->
+  <div class="card p-5 mb-4" id="imported-records-panel">
+    <div class="flex items-center justify-between mb-3">
+      <div>
+        <h3 class="font-semibold text-gray-800 text-sm">Imported Records</h3>
+        <p class="text-xs text-gray-500 mt-0.5">All opening balance imports, YTD entries and bank reconciliation records. You can edit or delete any record here.</p>
+      </div>
+      <button onclick="loadImportedRecords()" class="btn-secondary text-xs">↻ Refresh</button>
+    </div>
+    <div id="imported-records-body">
+      <p class="text-xs text-gray-400 py-4 text-center">Loading…</p>
+    </div>
   </div>
 
   <div class="card overflow-hidden" id="audit-log-panel" style="display:none;">
@@ -1185,6 +1199,7 @@ function showScreen(name) {
   if (name === 'users') loadUsers();
   if (name === 'ap') loadAP();
   if (name === 'ar') loadAR();
+  if (name === 'utilities') loadImportedRecords();
 }
 
 // ══════════════════════════════════════════════
@@ -3770,7 +3785,7 @@ async function confirmImport(tab) {
   const desc=tab==='tb'?`Opening Balance Import — ${src}`:`YTD Income Statement Import — ${src}`;
 
   const {error}=await sb.from('journals').insert({
-    date, ref_no:'OB-IMPORT', description:desc,
+    date, ref_no:tab==='is'?'IS-IMPORT':'OB-IMPORT', description:desc,
     type:'JE', lines, status:'posted',
     fund_id:'01', total_debit:totalDb, total_credit:totalCr,
     posted_at:new Date().toISOString(), posted_by:myId(), entered_by:myId()
@@ -3896,6 +3911,231 @@ function exportImportPDF() {
     doc.text('System-generated import confirmation — COP Accounting Management System',14,290);
   }
   doc.save(`Import_Confirmation_${rec.date.replace(/-/g,'')}.pdf`);
+}
+
+// ══════════════════════════════════════════════
+// IMPORTED RECORDS — LIST / EDIT / DELETE
+// ══════════════════════════════════════════════
+async function loadImportedRecords() {
+  const panel = document.getElementById('imported-records-body');
+  if (!panel) return;
+  panel.innerHTML = '<p class="text-xs text-gray-400 py-4 text-center">Loading…</p>';
+
+  const [jnlRes, bankRes] = await Promise.all([
+    sb.from('journals').select('id,date,ref_no,description,total_debit,total_credit,status,lines,entered_by,posted_at')
+      .in('ref_no', ['OB-IMPORT','IS-IMPORT']).order('date', {ascending:false}),
+    sb.from('bank_reconciliation').select('*').order('period_date', {ascending:false})
+  ]);
+
+  const jnls = jnlRes.data || [];
+  const banks = bankRes.data || [];
+
+  if (!jnls.length && !banks.length) {
+    panel.innerHTML = '<p class="text-xs text-gray-400 py-6 text-center">No imported records found. Use the Import Tool above to bring in opening balances.</p>';
+    return;
+  }
+
+  const bankAcctLabels = {
+    '1110':'Scotia Bank – General A/C','1113':'Scotia – US Exchange Fund',
+    '1115':'Head Office Savings A/C','1121':'Scotia – Missions',
+    '1091':'Cash at Hand','1092':'Petty Cash'
+  };
+
+  let html = `<table class="tbl text-xs mb-4">
+    <thead><tr><th>Type</th><th>Date</th><th>Description</th><th class="text-right">Debit</th><th class="text-right">Credit</th><th>Status</th><th>Actions</th></tr></thead><tbody>`;
+
+  jnls.forEach(j => {
+    const type = j.ref_no === 'IS-IMPORT' ? 'YTD Income Stmt' : 'Opening Balance';
+    html += `<tr>
+      <td><span class="badge-posted text-xs">${type}</span></td>
+      <td>${j.date}</td>
+      <td class="font-medium">${j.description}</td>
+      <td class="text-right font-mono">${fmt(j.total_debit)}</td>
+      <td class="text-right font-mono">${fmt(j.total_credit)}</td>
+      <td><span class="badge-${j.status}">${j.status}</span></td>
+      <td>
+        <div class="flex gap-2">
+          <button class="text-xs font-semibold hover:underline" style="color:#0284c7;" onclick="editImportedJournal('${j.id}')">Edit</button>
+          <button class="text-xs font-semibold text-red-500 hover:underline" onclick="deleteImportedJournal('${j.id}','${j.description.replace(/'/g,'&#39;')}')">Delete</button>
+        </div>
+      </td>
+    </tr>`;
+  });
+
+  banks.forEach(b => {
+    const acctLabel = bankAcctLabels[b.bank_account] || b.bank_account;
+    html += `<tr>
+      <td><span class="badge-draft text-xs">Bank Rec Opening</span></td>
+      <td>${b.period_date}</td>
+      <td class="font-medium">${acctLabel}</td>
+      <td class="text-right font-mono">${fmt(b.statement_balance)}</td>
+      <td class="text-right font-mono">${fmt(b.book_balance)}</td>
+      <td><span class="badge-${b.status==='reconciled'?'posted':'draft'}">${b.status}</span></td>
+      <td>
+        <div class="flex gap-2">
+          <button class="text-xs font-semibold hover:underline" style="color:#0284c7;" onclick="editImportedBankRec('${b.id}')">Edit</button>
+          <button class="text-xs font-semibold text-red-500 hover:underline" onclick="deleteImportedBankRec('${b.id}','${acctLabel}','${b.period_date}')">Delete</button>
+        </div>
+      </td>
+    </tr>`;
+  });
+
+  html += '</tbody></table>';
+  panel.innerHTML = html;
+}
+
+async function deleteImportedJournal(id, desc) {
+  if (!confirm(`Delete imported journal entry:\n"${desc}"\n\nThis cannot be undone.`)) return;
+  const { error } = await sb.from('journals').delete().eq('id', id);
+  if (error) { toast('Delete failed: ' + error.message, 'error'); return; }
+  await logAction('DELETE', 'journals', id);
+  toast('Import record deleted.', 'success');
+  loadImportedRecords();
+}
+
+async function deleteImportedBankRec(id, acct, date) {
+  if (!confirm(`Delete opening bank reconciliation:\n${acct} — ${date}\n\nThis cannot be undone.`)) return;
+  const { error } = await sb.from('bank_reconciliation').delete().eq('id', id);
+  if (error) { toast('Delete failed: ' + error.message, 'error'); return; }
+  await logAction('DELETE', 'bank_reconciliation', id);
+  toast('Bank reconciliation record deleted.', 'success');
+  loadImportedRecords();
+}
+
+async function editImportedJournal(id) {
+  // Fetch full journal
+  const { data, error } = await sb.from('journals').select('*').eq('id', id).single();
+  if (error || !data) { toast('Could not load record.', 'error'); return; }
+
+  const lines = data.lines || [];
+  const linesHTML = lines.map((l, i) => {
+    const acct = coaCache.find(a => a.code === l.account_code);
+    return `<tr>
+      <td class="py-1 pr-2 text-xs text-gray-600">${l.account_code} – ${acct ? acct.name : l.description || ''}</td>
+      <td class="py-1 pr-2"><select class="form-input text-xs w-16" id="ej-dc-${i}">
+        <option value="DB" ${l.dc==='DB'?'selected':''}>DB</option>
+        <option value="CR" ${l.dc==='CR'?'selected':''}>CR</option>
+      </select></td>
+      <td class="py-1"><input type="number" step="0.01" class="form-input text-xs w-28" id="ej-amt-${i}" value="${parseFloat(l.amount).toFixed(2)}"></td>
+    </tr>`;
+  }).join('');
+
+  openModal(`Edit Imported Journal — ${data.date}`,
+    `<div class="space-y-3">
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="form-label">Date</label><input type="date" id="ej-date" class="form-input" value="${data.date}"></div>
+        <div><label class="form-label">Description</label><input type="text" id="ej-desc" class="form-input" value="${(data.description||'').replace(/"/g,'&quot;')}"></div>
+      </div>
+      <div>
+        <label class="form-label">Journal Lines</label>
+        <div class="text-xs text-gray-500 mb-2">Adjust debit/credit and amounts as needed. Account codes cannot be changed here — delete and re-import to change accounts.</div>
+        <table class="w-full">
+          <thead><tr><th class="text-left text-xs text-gray-500 pb-1 font-semibold">Account</th><th class="text-left text-xs text-gray-500 pb-1 font-semibold">DC</th><th class="text-left text-xs text-gray-500 pb-1 font-semibold">Amount (CAD)</th></tr></thead>
+          <tbody>${linesHTML}</tbody>
+        </table>
+      </div>
+      <div id="ej-balance-check" class="text-xs font-semibold mt-1"></div>
+    </div>`,
+    `<button class="btn-secondary" onclick="closeModal()">Cancel</button>
+     <button class="btn-primary" onclick="saveEditedJournal('${id}',${lines.length})">Save Changes</button>`
+  );
+
+  // Live balance check
+  lines.forEach((_,i) => {
+    document.getElementById(`ej-amt-${i}`)?.addEventListener('input', () => checkEditJournalBalance(lines.length));
+    document.getElementById(`ej-dc-${i}`)?.addEventListener('change', () => checkEditJournalBalance(lines.length));
+  });
+  checkEditJournalBalance(lines.length);
+}
+
+function checkEditJournalBalance(count) {
+  let db=0, cr=0;
+  for(let i=0;i<count;i++) {
+    const dc=document.getElementById(`ej-dc-${i}`)?.value;
+    const amt=parseFloat(document.getElementById(`ej-amt-${i}`)?.value)||0;
+    if(dc==='DB') db+=amt; else cr+=amt;
+  }
+  const el=document.getElementById('ej-balance-check');
+  if(!el) return;
+  const balanced=Math.abs(db-cr)<0.01;
+  el.textContent = balanced ? `✓ Balanced — Total: ${fmt(db)}` : `⚠ Out of balance — Debit: ${fmt(db)}  Credit: ${fmt(cr)}  Difference: ${fmt(Math.abs(db-cr))}`;
+  el.style.color = balanced ? '#16a34a' : '#dc2626';
+}
+
+async function saveEditedJournal(id, lineCount) {
+  const date = document.getElementById('ej-date')?.value;
+  const desc = document.getElementById('ej-desc')?.value?.trim();
+  if (!date) { toast('Date is required.', 'error'); return; }
+
+  // Rebuild lines from modal
+  const { data: orig } = await sb.from('journals').select('lines').eq('id', id).single();
+  const origLines = orig?.lines || [];
+  const newLines = origLines.map((l, i) => ({
+    ...l,
+    dc: document.getElementById(`ej-dc-${i}`)?.value || l.dc,
+    amount: parseFloat(document.getElementById(`ej-amt-${i}`)?.value) || l.amount
+  }));
+
+  const totalDebit  = newLines.filter(l=>l.dc==='DB').reduce((s,l)=>s+l.amount,0);
+  const totalCredit = newLines.filter(l=>l.dc==='CR').reduce((s,l)=>s+l.amount,0);
+
+  const { error } = await sb.from('journals').update({
+    date, description: desc, lines: newLines,
+    total_debit: totalDebit, total_credit: totalCredit
+  }).eq('id', id);
+
+  if (error) { toast('Save failed: ' + error.message, 'error'); return; }
+  await logAction('UPDATE', 'journals', id);
+  closeModal();
+  toast('Import record updated.', 'success');
+  loadImportedRecords();
+}
+
+async function editImportedBankRec(id) {
+  const { data, error } = await sb.from('bank_reconciliation').select('*').eq('id', id).single();
+  if (error || !data) { toast('Could not load record.', 'error'); return; }
+
+  openModal('Edit Opening Bank Reconciliation',
+    `<div class="space-y-4">
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="form-label">Bank Account</label>
+          <select id="ebr-account" class="form-input">
+            <option value="1110" ${data.bank_account==='1110'?'selected':''}>1110 – Scotia Bank – General A/C</option>
+            <option value="1113" ${data.bank_account==='1113'?'selected':''}>1113 – Scotia – US Exchange Fund</option>
+            <option value="1115" ${data.bank_account==='1115'?'selected':''}>1115 – Head Office Savings A/C</option>
+            <option value="1121" ${data.bank_account==='1121'?'selected':''}>1121 – Scotia – Missions</option>
+            <option value="1091" ${data.bank_account==='1091'?'selected':''}>1091 – Cash at Hand</option>
+            <option value="1092" ${data.bank_account==='1092'?'selected':''}>1092 – Petty Cash</option>
+          </select>
+        </div>
+        <div><label class="form-label">Reconciliation Date</label><input type="date" id="ebr-date" class="form-input" value="${data.period_date}"></div>
+        <div><label class="form-label">Bank Statement Balance ($)</label><input type="number" step="0.01" id="ebr-stmt" class="form-input" value="${data.statement_balance}"></div>
+        <div><label class="form-label">Book Balance ($)</label><input type="number" step="0.01" id="ebr-book" class="form-input" value="${data.book_balance}"></div>
+      </div>
+    </div>`,
+    `<button class="btn-secondary" onclick="closeModal()">Cancel</button>
+     <button class="btn-primary" onclick="saveEditedBankRec('${id}')">Save Changes</button>`
+  );
+}
+
+async function saveEditedBankRec(id) {
+  const account = document.getElementById('ebr-account')?.value;
+  const date    = document.getElementById('ebr-date')?.value;
+  const stmt    = parseFloat(document.getElementById('ebr-stmt')?.value) || 0;
+  const book    = parseFloat(document.getElementById('ebr-book')?.value) || 0;
+  if (!date) { toast('Date is required.', 'error'); return; }
+
+  const { error } = await sb.from('bank_reconciliation').update({
+    bank_account: account, period_date: date,
+    statement_balance: stmt, book_balance: book
+  }).eq('id', id);
+
+  if (error) { toast('Save failed: ' + error.message, 'error'); return; }
+  await logAction('UPDATE', 'bank_reconciliation', id);
+  closeModal();
+  toast('Bank reconciliation updated.', 'success');
+  loadImportedRecords();
 }
 
 // ══════════════════════════════════════════════
