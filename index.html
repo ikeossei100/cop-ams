@@ -4161,8 +4161,14 @@ async function confirmImport(tab) {
   const totalCr=lines.filter(l=>l.dc==='CR').reduce((s,l)=>s+l.amount,0);
   const desc=tab==='tb'?`Opening Balance Import — ${src}`:`YTD Income Statement Import — ${src}`;
 
+  const refNo = tab==='is'?'IS-IMPORT':'OB-IMPORT';
+
+  // Delete any previous import of the same type so new one replaces it
+  const {error:delErr} = await sb.from('journals').delete().eq('ref_no', refNo);
+  if(delErr) { showImportResult(false,'Could not remove previous import: '+delErr.message); return; }
+
   const {error}=await sb.from('journals').insert({
-    date, ref_no:tab==='is'?'IS-IMPORT':'OB-IMPORT', description:desc,
+    date, ref_no:refNo, description:desc,
     type:'JE', lines, status:'posted',
     fund_id:'01', total_debit:totalDb, total_credit:totalCr,
     posted_at:new Date().toISOString(), posted_by:myId(), entered_by:myId()
