@@ -4281,25 +4281,43 @@ function exportImportPDF() {
     doc.text(`Book Balance:      CAD ${fmt(rec.bookBal)}`,17,y+26);
     y+=40;
   } else {
-    const tableRows=rec.rows.map(r=>[r.code,r.name,r.debit>0?fmt(r.debit):'',r.credit>0?fmt(r.credit):'']);
+    const isIS = rec.type==='is';
+    // For IS: income rows have debit>0, expense rows have credit>0
+    // PDF columns: Income (left) | Expenses (right)  — or generic Debit | Credit for TB
+    const col3Head = isIS ? 'Income (CAD)'   : 'Debit (CAD)';
+    const col4Head = isIS ? 'Expenses (CAD)' : 'Credit (CAD)';
+    const tableRows=rec.rows.map(r=>[
+      r.code,
+      r.name,
+      r.debit>0  ? fmt(r.debit)  : '',
+      r.credit>0 ? fmt(r.credit) : ''
+    ]);
     const totalDb=rec.rows.reduce((s,r)=>s+r.debit,0);
     const totalCr=rec.rows.reduce((s,r)=>s+r.credit,0);
+    const footLabel = isIS ? ['','TOTAL INCOME','TOTAL EXPENSES'] : ['','TOTALS'];
     doc.autoTable({
-      head:[['Account Code','Account Name','Debit (CAD)','Credit (CAD)']],
+      head:[[  'Account Code','Account Name', col3Head, col4Head ]],
       body:tableRows,
-      foot:[['','TOTALS',fmt(totalDb),fmt(totalCr)]],
+      foot:[['', isIS?'TOTALS':'TOTALS', fmt(totalDb), fmt(totalCr)]],
       startY:y, theme:'striped',
       headStyles:{fillColor:[2,132,199],textColor:[255,255,255],fontStyle:'bold',fontSize:10},
       footStyles:{fillColor:[240,240,240],textColor:[40,40,40],fontStyle:'bold',fontSize:8},
       bodyStyles:{fontSize:10},
-      columnStyles:{0:{cellWidth:24},2:{halign:'right',cellWidth:30},3:{halign:'right',cellWidth:30}},
+      columnStyles:{0:{cellWidth:24},2:{halign:'right',cellWidth:32},3:{halign:'right',cellWidth:32}},
       margin:{left:14,right:14}
     });
     y=doc.lastAutoTable.finalY+6;
-    const balanced=Math.abs(totalDb-totalCr)<0.01;
-    doc.setFontSize(11); doc.setFont('helvetica','bold');
-    doc.setTextColor(balanced?22:200, balanced?163:16, balanced?74:46);
-    doc.text(balanced?'Verified: Debits equal Credits — Balanced':'Warning: Out of balance by '+fmt(Math.abs(totalDb-totalCr)),14,y);
+    if(isIS){
+      const netSurplus=totalDb-totalCr;
+      doc.setFontSize(11); doc.setFont('helvetica','bold');
+      doc.setTextColor(netSurplus>=0?22:200, netSurplus>=0?163:16, netSurplus>=0?74:46);
+      doc.text((netSurplus>=0?'Net Surplus: ':'Net Deficit: ')+fmt(Math.abs(netSurplus)),14,y);
+    } else {
+      const balanced=Math.abs(totalDb-totalCr)<0.01;
+      doc.setFontSize(11); doc.setFont('helvetica','bold');
+      doc.setTextColor(balanced?22:200, balanced?163:16, balanced?74:46);
+      doc.text(balanced?'Verified: Debits equal Credits — Balanced':'Warning: Out of balance by '+fmt(Math.abs(totalDb-totalCr)),14,y);
+    }
   }
 
   // Page numbers + footer note
