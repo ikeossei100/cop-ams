@@ -818,7 +818,25 @@ tailwind.config = {
           </div>
           <div>
             <label class="form-label">Upload File (CSV, Excel or PDF) *</label>
-            <input type="file" id="imp-tb-file" accept=".csv,.xlsx,.xls,.pdf" class="form-input text-xs" onchange="parseImportFile('tb')">
+            <div class="flex items-center gap-2">
+              <label for="imp-tb-file" class="btn-secondary text-xs cursor-pointer flex items-center gap-1.5">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+                Choose File
+              </label>
+              <input type="file" id="imp-tb-file" accept=".csv,.xlsx,.xls,.pdf" class="hidden" onchange="onImportFileChosen('tb')">
+              <span id="imp-tb-filename" class="text-xs text-gray-500 italic truncate max-w-xs">No file chosen</span>
+            </div>
+            <!-- File action buttons — shown after file chosen -->
+            <div id="imp-tb-file-actions" class="hidden flex items-center gap-2 mt-2">
+              <button onclick="submitImportFile('tb')" class="btn-primary text-xs flex items-center gap-1.5">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                Submit File
+              </button>
+              <button onclick="removeImportFile('tb')" class="btn-danger text-xs flex items-center gap-1.5">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                Remove File
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -891,7 +909,24 @@ tailwind.config = {
         </div>
         <div class="md:col-span-2">
           <label class="form-label">Upload Bank Reconciliation Statement PDF <span class="text-gray-400 font-normal">(optional — auto-fills balances)</span></label>
-          <input type="file" id="imp-bank-file" accept=".pdf,.csv,.xlsx,.xls" class="form-input text-xs" onchange="parseBankStatementFile()">
+          <div class="flex items-center gap-2">
+            <label for="imp-bank-file" class="btn-secondary text-xs cursor-pointer flex items-center gap-1.5">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+              Choose File
+            </label>
+            <input type="file" id="imp-bank-file" accept=".pdf,.csv,.xlsx,.xls" class="hidden" onchange="onBankFileChosen()">
+            <span id="imp-bank-filename" class="text-xs text-gray-500 italic truncate max-w-xs">No file chosen</span>
+          </div>
+          <div id="imp-bank-file-actions" class="hidden flex items-center gap-2 mt-2">
+            <button onclick="submitBankFile()" class="btn-primary text-xs flex items-center gap-1.5">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              Submit File
+            </button>
+            <button onclick="removeBankFile()" class="btn-danger text-xs flex items-center gap-1.5">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+              Remove File
+            </button>
+          </div>
           <div id="imp-bank-parse-status" class="text-xs text-gray-500 mt-1"></div>
         </div>
       </div>
@@ -958,7 +993,25 @@ tailwind.config = {
           </div>
           <div>
             <label class="form-label">Upload File (CSV, Excel or PDF) *</label>
-            <input type="file" id="imp-is-file" accept=".csv,.xlsx,.xls,.pdf" class="form-input text-xs" onchange="parseImportFile('is')">
+            <div class="flex items-center gap-2">
+              <label for="imp-is-file" class="btn-secondary text-xs cursor-pointer flex items-center gap-1.5">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+                Choose File
+              </label>
+              <input type="file" id="imp-is-file" accept=".csv,.xlsx,.xls,.pdf" class="hidden" onchange="onImportFileChosen('is')">
+              <span id="imp-is-filename" class="text-xs text-gray-500 italic truncate max-w-xs">No file chosen</span>
+            </div>
+            <!-- File action buttons — shown after file chosen -->
+            <div id="imp-is-file-actions" class="hidden flex items-center gap-2 mt-2">
+              <button onclick="submitImportFile('is')" class="btn-primary text-xs flex items-center gap-1.5">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                Submit File
+              </button>
+              <button onclick="removeImportFile('is')" class="btn-danger text-xs flex items-center gap-1.5">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                Remove File
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -3483,6 +3536,86 @@ function initPDFjs() {
   }
 }
 
+// ── File picker UI helpers ──
+function onImportFileChosen(tab) {
+  const input = document.getElementById(`imp-${tab}-file`);
+  const file  = input?.files?.[0];
+  const label = document.getElementById(`imp-${tab}-filename`);
+  const actions = document.getElementById(`imp-${tab}-file-actions`);
+  if (file) {
+    label.textContent = file.name;
+    label.classList.remove('text-gray-500','italic');
+    label.classList.add('text-gray-800','font-medium');
+    actions.classList.remove('hidden');
+  } else {
+    label.textContent = 'No file chosen';
+    label.classList.add('text-gray-500','italic');
+    label.classList.remove('text-gray-800','font-medium');
+    actions.classList.add('hidden');
+  }
+}
+
+function submitImportFile(tab) {
+  const input = document.getElementById(`imp-${tab}-file`);
+  if (!input?.files?.[0]) { toast('No file selected.', 'error'); return; }
+  parseImportFile(tab);
+}
+
+function removeImportFile(tab) {
+  const input = document.getElementById(`imp-${tab}-file`);
+  if (input) input.value = '';
+  const label   = document.getElementById(`imp-${tab}-filename`);
+  const actions = document.getElementById(`imp-${tab}-file-actions`);
+  if (label)   { label.textContent = 'No file chosen'; label.classList.add('text-gray-500','italic'); label.classList.remove('text-gray-800','font-medium'); }
+  if (actions) actions.classList.add('hidden');
+  // Also reset any parsed preview
+  const mapper  = document.getElementById(`imp-${tab}-mapper`);
+  const preview = document.getElementById(`imp-${tab}-preview`);
+  if (mapper)  mapper.style.display  = 'none';
+  if (preview) preview.style.display = 'none';
+  importRawRows[tab] = [];
+  importRawRows[tab+'_parsed'] = [];
+  toast('File removed.', 'info');
+}
+
+function onBankFileChosen() {
+  const input   = document.getElementById('imp-bank-file');
+  const file    = input?.files?.[0];
+  const label   = document.getElementById('imp-bank-filename');
+  const actions = document.getElementById('imp-bank-file-actions');
+  if (file) {
+    label.textContent = file.name;
+    label.classList.remove('text-gray-500','italic');
+    label.classList.add('text-gray-800','font-medium');
+    actions.classList.remove('hidden');
+  } else {
+    label.textContent = 'No file chosen';
+    label.classList.add('text-gray-500','italic');
+    label.classList.remove('text-gray-800','font-medium');
+    actions.classList.add('hidden');
+  }
+}
+
+function submitBankFile() {
+  const input = document.getElementById('imp-bank-file');
+  if (!input?.files?.[0]) { toast('No file selected.', 'error'); return; }
+  parseBankStatementFile();
+}
+
+function removeBankFile() {
+  const input = document.getElementById('imp-bank-file');
+  if (input) input.value = '';
+  const label   = document.getElementById('imp-bank-filename');
+  const actions = document.getElementById('imp-bank-file-actions');
+  const status  = document.getElementById('imp-bank-parse-status');
+  if (label)   { label.textContent = 'No file chosen'; label.classList.add('text-gray-500','italic'); label.classList.remove('text-gray-800','font-medium'); }
+  if (actions) actions.classList.add('hidden');
+  if (status)  status.textContent = '';
+  // Clear any auto-filled values
+  ['imp-bank-stmt','imp-bank-book'].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
+  toast('File removed.', 'info');
+}
+
 function parseImportFile(tab) {
   const fileInput=document.getElementById(`imp-${tab}-file`);
   const file=fileInput?.files?.[0];
@@ -3869,8 +4002,15 @@ async function importBankOpening() {
 function resetImport(tab) {
   const file=document.getElementById(`imp-${tab}-file`);
   if(file) file.value='';
-  document.getElementById(`imp-${tab}-mapper`).style.display='none';
-  document.getElementById(`imp-${tab}-preview`).style.display='none';
+  // Reset file picker UI
+  const label   = document.getElementById(`imp-${tab}-filename`);
+  const actions = document.getElementById(`imp-${tab}-file-actions`);
+  if (label)   { label.textContent='No file chosen'; label.classList.add('text-gray-500','italic'); label.classList.remove('text-gray-800','font-medium'); }
+  if (actions) actions.classList.add('hidden');
+  const mapper  = document.getElementById(`imp-${tab}-mapper`);
+  const preview = document.getElementById(`imp-${tab}-preview`);
+  if (mapper)  mapper.style.display='none';
+  if (preview) preview.style.display='none';
   importRawRows[tab]=[];
   importRawRows[tab+'_parsed']=[];
 }
