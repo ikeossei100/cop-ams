@@ -4234,8 +4234,12 @@ async function loadImportedRecords() {
 
 async function deleteImportedJournal(id, desc) {
   if (!confirm(`Delete imported journal entry:\n"${desc}"\n\nThis cannot be undone.`)) return;
-  const { error } = await sb.from('journals').delete().eq('id', id);
+  const { data, error } = await sb.from('journals').delete().eq('id', id).select();
   if (error) { toast('Delete failed: ' + error.message, 'error'); return; }
+  if (!data || data.length === 0) {
+    toast('Delete blocked by database permissions. Run the DELETE policy SQL in Supabase (see instructions).', 'error');
+    return;
+  }
   await logAction('DELETE', 'journals', id);
   toast('Import record deleted.', 'success');
   loadImportedRecords();
@@ -4243,8 +4247,12 @@ async function deleteImportedJournal(id, desc) {
 
 async function deleteImportedBankRec(id, acct, date) {
   if (!confirm(`Delete opening bank reconciliation:\n${acct} — ${date}\n\nThis cannot be undone.`)) return;
-  const { error } = await sb.from('bank_reconciliation').delete().eq('id', id);
+  const { data, error } = await sb.from('bank_reconciliation').delete().eq('id', id).select();
   if (error) { toast('Delete failed: ' + error.message, 'error'); return; }
+  if (!data || data.length === 0) {
+    toast('Delete blocked by database permissions. Run the DELETE policy SQL in Supabase (see instructions).', 'error');
+    return;
+  }
   await logAction('DELETE', 'bank_reconciliation', id);
   toast('Bank reconciliation record deleted.', 'success');
   loadImportedRecords();
