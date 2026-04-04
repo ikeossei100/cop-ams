@@ -826,13 +826,9 @@ tailwind.config = {
               <input type="file" id="imp-tb-file" accept=".csv,.xlsx,.xls,.pdf" class="hidden" onchange="onImportFileChosen('tb')">
               <span id="imp-tb-filename" class="text-xs text-gray-500 italic truncate max-w-xs">No file chosen</span>
             </div>
-            <!-- File action buttons — shown after file chosen -->
+            <!-- Remove button — shown after file chosen -->
             <div id="imp-tb-file-actions" style="display:none;" class="flex items-center gap-2 mt-2">
-              <button onclick="submitImportFile('tb')" class="btn-primary text-xs flex items-center gap-1.5">
-                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                Submit File
-              </button>
-              <button onclick="removeImportFile('tb')" class="btn-danger text-xs flex items-center gap-1.5">
+              <button type="button" onclick="removeImportFile('tb')" class="btn-danger text-xs flex items-center gap-1.5">
                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
                 Remove File
               </button>
@@ -1001,13 +997,9 @@ tailwind.config = {
               <input type="file" id="imp-is-file" accept=".csv,.xlsx,.xls,.pdf" class="hidden" onchange="onImportFileChosen('is')">
               <span id="imp-is-filename" class="text-xs text-gray-500 italic truncate max-w-xs">No file chosen</span>
             </div>
-            <!-- File action buttons — shown after file chosen -->
+            <!-- Remove button — shown after file chosen -->
             <div id="imp-is-file-actions" style="display:none;" class="flex items-center gap-2 mt-2">
-              <button onclick="submitImportFile('is')" class="btn-primary text-xs flex items-center gap-1.5">
-                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                Submit File
-              </button>
-              <button onclick="removeImportFile('is')" class="btn-danger text-xs flex items-center gap-1.5">
+              <button type="button" onclick="removeImportFile('is')" class="btn-danger text-xs flex items-center gap-1.5">
                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
                 Remove File
               </button>
@@ -3548,6 +3540,8 @@ function onImportFileChosen(tab) {
     label.style.fontWeight = '600';
     label.style.fontStyle = 'normal';
     if (actions) actions.style.display = 'flex';
+    // Auto-process the file immediately — no need for a separate Submit step
+    parseImportFile(tab);
   } else {
     label.textContent = 'No file chosen';
     label.style.color = '';
