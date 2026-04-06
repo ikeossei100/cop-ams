@@ -203,7 +203,7 @@ tailwind.config = {
       <!-- Logo -->
       <div class="text-center mb-8">
         <div class="inline-flex items-center justify-center mb-4" style="width:90px;height:90px;">
-          <img src="logo/WhatsApp Image 2026-04-05 at 9.49.21 PM.jpeg" alt="COP Logo" style="width:90px;height:90px;object-fit:contain;border-radius:50%;box-shadow:0 8px 28px rgba(26,60,143,0.4),0 2px 8px rgba(0,0,0,0.2);">
+          <img src="logo/cop-logo.jpeg" alt="COP Logo" style="width:90px;height:90px;object-fit:contain;border-radius:50%;box-shadow:0 8px 28px rgba(26,60,143,0.4),0 2px 8px rgba(0,0,0,0.2);">
         </div>
         <h1 style="font-family:'Playfair Display',serif;font-size:1.6rem;font-weight:700;color:#1e293b;letter-spacing:-0.02em;line-height:1.2;">Church of Pentecost</h1>
         <p style="font-size:0.8rem;color:#64748b;margin-top:4px;font-weight:500;letter-spacing:0.04em;text-transform:uppercase;">Canada — Accounting Management System</p>
@@ -238,7 +238,7 @@ tailwind.config = {
     <div class="px-4 py-5 border-b border-white/10" style="background:rgba(26,60,143,0.12);">
       <div class="flex items-center gap-3">
         <div class="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 overflow-hidden" style="box-shadow:0 4px 10px rgba(26,60,143,0.4);">
-          <img src="logo/WhatsApp Image 2026-04-05 at 9.49.21 PM.jpeg" alt="COP" style="width:36px;height:36px;object-fit:cover;border-radius:10px;">
+          <img src="logo/cop-logo.jpeg" alt="COP" style="width:36px;height:36px;object-fit:cover;border-radius:10px;">
         </div>
         <div>
           <div class="text-sm font-bold text-white leading-tight" style="font-family:'Playfair Display',serif;">COP Canada</div>
@@ -576,6 +576,7 @@ tailwind.config = {
       </select>
     </div>
     <div class="flex gap-2">
+      <button class="btn-gold text-xs" onclick="exportJnlPDF()">Export PDF</button>
       <button class="btn-secondary text-xs" onclick="exportJnlCSV()">Export CSV</button>
       <button class="btn-primary text-xs role-entry-only" onclick="openJournalForm()">+ New Journal</button>
     </div>
@@ -2467,6 +2468,180 @@ function exportJnlCSV() {
   const rows=[['Date','Ref#','Type','Description','Total Debit','Total Credit','Status']];
   journalData.forEach(j=>rows.push([j.date,j.ref_no||'',j.type,j.description,j.total_debit,j.total_credit,j.status]));
   downloadCSV(rows,'Journals.csv');
+}
+
+function exportJnlPDF() {
+  if(!journalData||!journalData.length){toast('No journal data to export.','error');return;}
+  if(typeof window.jspdf==='undefined'){toast('jsPDF not loaded.','error');return;}
+  const {jsPDF}=window.jspdf;
+  const doc=new jsPDF({orientation:'landscape',unit:'mm',format:'a4'});
+  const pageW=297, pageH=210, marginL=14, marginR=14;
+
+  // — Header — drawn once, page added via autoTable's didDrawPage
+  const monthVal=document.getElementById('jnl-month')?.value||'';
+  const printDate=new Date().toLocaleString('en-CA',{year:'numeric',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+
+  function drawPageHeader(doc){
+    // Dark blue bar
+    doc.setFillColor(26,60,143);
+    doc.rect(0,0,pageW,20,'F');
+    // Church name
+    doc.setTextColor(255,255,255);
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(13);
+    doc.text('Church of Pentecost Canada Inc',marginL,9);
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(9);
+    doc.text('Journal Report',marginL,16);
+    // Period & print date on right
+    doc.setFontSize(8);
+    doc.text(`Period: ${monthVal||'All'}`,pageW-marginR,9,{align:'right'});
+    doc.text(`Printed: ${printDate}`,pageW-marginR,16,{align:'right'});
+    // Gold underline
+    doc.setDrawColor(255,215,0);
+    doc.setLineWidth(0.8);
+    doc.line(0,20,pageW,20);
+  }
+
+  drawPageHeader(doc);
+
+  // Build table rows — grouped by ref_no
+  // Each entry: header row (shaded) + one row per line + blank spacer row
+  const tableBody=[];
+  let grandDebit=0, grandCredit=0;
+
+  // Sort journalData by date then ref_no
+  const sorted=[...journalData].sort((a,b)=>a.date.localeCompare(b.date)||(a.ref_no||'').localeCompare(b.ref_no||''));
+
+  sorted.forEach(j=>{
+    const lines=Array.isArray(j.lines)?j.lines:[];
+    const refNo=j.ref_no||'—';
+    const jDate=j.date||'';
+    const jDesc=j.description||'';
+    const jType=j.type||'JE';
+    const statusTag=j.status==='reversed'?'  [REVERSED]':j.status==='draft'?'  [DRAFT]':'';
+
+    // Entry header row — spans description, no debit/credit values
+    tableBody.push({
+      _type:'header',
+      cells:[jDate, refNo, jType, `${jDesc}${statusTag}`, '', '', '']
+    });
+
+    lines.forEach(l=>{
+      const acctName=coaCache.find(a=>a.code===l.account_code)?.name||'';
+      const amt=parseFloat(l.amount)||0;
+      const db=l.dc==='DB'?amt:0;
+      const cr=l.dc==='CR'?amt:0;
+      grandDebit+=db;
+      grandCredit+=cr;
+      tableBody.push({
+        _type:'line',
+        cells:['', '', '', l.description||jDesc, l.account_code||'', acctName, db>0?fmt(db):'', cr>0?fmt(cr):'']
+      });
+    });
+
+    // Entry subtotal
+    tableBody.push({
+      _type:'subtotal',
+      cells:['','','','Entry Total','','',fmt(j.total_debit||0),fmt(j.total_credit||0)]
+    });
+
+    // Blank spacer
+    tableBody.push({_type:'spacer',cells:['','','','','','','','']});
+  });
+
+  // Grand total
+  tableBody.push({
+    _type:'grandtotal',
+    cells:['','','','GRAND TOTAL','','',fmt(grandDebit),fmt(grandCredit)]
+  });
+
+  // Flatten to plain arrays for autoTable
+  const bodyRows=tableBody.map(r=>r.cells);
+
+  doc.autoTable({
+    head:[[
+      {content:'Date',        styles:{halign:'center',cellWidth:20}},
+      {content:'Ref #',       styles:{halign:'center',cellWidth:18}},
+      {content:'Type',        styles:{halign:'center',cellWidth:12}},
+      {content:'Description', styles:{cellWidth:70}},
+      {content:'Acct #',      styles:{halign:'center',cellWidth:16}},
+      {content:'Account Name',styles:{cellWidth:60}},
+      {content:'Debit (CAD)', styles:{halign:'right',cellWidth:28}},
+      {content:'Credit (CAD)',styles:{halign:'right',cellWidth:28}}
+    ]],
+    body: bodyRows,
+    startY:25,
+    theme:'plain',
+    headStyles:{
+      fillColor:[26,60,143],
+      textColor:[255,255,255],
+      fontStyle:'bold',
+      fontSize:8,
+      cellPadding:2
+    },
+    bodyStyles:{fontSize:8, cellPadding:1.5},
+    columnStyles:{
+      0:{cellWidth:20},
+      1:{cellWidth:18, halign:'center'},
+      2:{cellWidth:12, halign:'center'},
+      3:{cellWidth:70},
+      4:{cellWidth:16, halign:'center'},
+      5:{cellWidth:60},
+      6:{cellWidth:28, halign:'right'},
+      7:{cellWidth:28, halign:'right'}
+    },
+    didParseCell:(data)=>{
+      const r=tableBody[data.row.index];
+      if(!r) return;
+      if(r._type==='header'){
+        data.cell.styles.fillColor=[230,235,248];
+        data.cell.styles.fontStyle='bold';
+        data.cell.styles.fontSize=8;
+      } else if(r._type==='subtotal'){
+        data.cell.styles.fillColor=[245,245,245];
+        data.cell.styles.fontStyle='bold';
+        data.cell.styles.textColor=[60,60,60];
+        // draw top border
+        data.cell.styles.lineWidth={top:0.3,bottom:0,left:0,right:0};
+        data.cell.styles.lineColor=[180,180,180];
+      } else if(r._type==='grandtotal'){
+        data.cell.styles.fillColor=[26,60,143];
+        data.cell.styles.textColor=[255,255,255];
+        data.cell.styles.fontStyle='bold';
+        data.cell.styles.fontSize=9;
+      } else if(r._type==='spacer'){
+        data.cell.styles.minCellHeight=3;
+      }
+    },
+    didDrawPage:(hookData)=>{
+      if(hookData.pageNumber>1) drawPageHeader(doc);
+      // Footer
+      const pg=doc.getNumberOfPages();
+      doc.setFontSize(7);
+      doc.setTextColor(150,150,150);
+      doc.text(`Page ${hookData.pageNumber}`,pageW-marginR,pageH-4,{align:'right'});
+      doc.text('Church of Pentecost Canada Inc — Confidential',marginL,pageH-4);
+      // Gold footer line
+      doc.setDrawColor(255,215,0);
+      doc.setLineWidth(0.5);
+      doc.line(marginL,pageH-7,pageW-marginR,pageH-7);
+    },
+    margin:{left:marginL,right:marginR,top:26,bottom:12}
+  });
+
+  // Final page count
+  const totalPages=doc.getNumberOfPages();
+  for(let i=1;i<=totalPages;i++){
+    doc.setPage(i);
+    doc.setFontSize(7);
+    doc.setTextColor(150,150,150);
+    doc.text(`Page ${i} of ${totalPages}`,pageW-marginR,pageH-4,{align:'right'});
+  }
+
+  const filename=`Journal_Report_${monthVal||'All'}.pdf`;
+  doc.save(filename);
+  toast(`Exported ${filename}`,'success');
 }
 
 // ══════════════════════════════════════════════
