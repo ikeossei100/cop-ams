@@ -3862,28 +3862,66 @@ function findHeaderRowIdx(rows) {
       c==='code'||c==='acct'||c==='acct #'||c==='account #'||c==='acct. code'
     );
     if (hasCode) return i;
-    // Also accept: has description/name AND a balance/debit column
+    // Also accept: has description/name AND a balance/amount/debit column
     const hasDesc = lower.some(c=>c==='description'||c==='account name'||c==='account description'||c==='name');
-    const hasBal  = lower.some(c=>c.includes('balance')||c==='debit'||c==='credit');
+    const hasBal  = lower.some(c=>
+      c.includes('balance')||c==='debit'||c==='credit'||
+      c.includes('year to date')||c.includes('ytd')||
+      c.includes('month to date')||c.includes('mtd')||
+      c.includes('current mo')||c.includes('curr mo')
+    );
     if (hasDesc && hasBal) return i;
   }
   return 0; // fallback — use first row
 }
 
 // ── Auto-detect Power Church column positions from a header row ──
+// Handles both Trial Balance format AND Income & Expense Statement format.
 function detectPCColumns(headerRow) {
   const lower = headerRow.map(c=>(c||'').toString().toLowerCase().trim());
-  const find = (terms) => lower.findIndex(c => terms.some(t => c.includes(t)));
+  const find  = (terms) => lower.findIndex(c => terms.some(t => c.includes(t)));
 
+  // Account identifier
   const codeIdx    = find(['acct code','account code','account no','account number','acct #','account #','acct. code','code','acct']);
+  // Description / name
   const nameIdx    = find(['description','account description','account name','acct name','name','title']);
+
+  // ── Trial Balance columns ──
   const beginIdx   = find(['beg balance','beg bal','beginning balance','beginning bal','beg.','begin']);
-  const periodIdx  = find(['period actual','period act','current period','period']);
-  const currentIdx = find(['curr balance','curr bal','current balance','current bal','ytd balance','ytd bal','ending balance','ending bal','balance']);
+  const periodIdx  = find(['period actual','period act','current period','period actual']);
+  const currentIdx = find(['curr balance','curr bal','current balance','current bal','ending balance','ending bal']);
+
+  // ── Income & Expense Statement columns ──
+  // "Year to Date" is the authoritative full-period amount for IS imports
+  const ytdIdx     = find(['year to date','yr to date','y.t.d','ytd']);
+  // "Month to Date" / "Current Month" — current-period column
+  const mtdIdx     = find(['month to date','mo to date','m.t.d','mtd','current month','curr mo','current mo','curr month']);
+  // Budget column — detected so we can skip it
+  const budgetIdx  = find(['budget','bgt']);
+
+  // Debit / Credit (generic format)
   const debitIdx   = find(['debit','dr ']);
   const creditIdx  = find(['credit','cr ']);
 
-  return { codeIdx, nameIdx, beginIdx, periodIdx, currentIdx, debitIdx, creditIdx };
+  return { codeIdx, nameIdx, beginIdx, periodIdx, currentIdx, ytdIdx, mtdIdx, budgetIdx, debitIdx, creditIdx };
+}
+
+// ── Rows that are section headers or totals — not real account rows ──
+const PC_SKIP_PATTERNS = [
+  /^income$/i, /^expenses?$/i, /^revenue$/i,
+  /^total income/i, /^total expenses?/i, /^total revenue/i,
+  /^excess income/i, /^net income/i, /^net surplus/i, /^net loss/i,
+  /^grand total/i, /^subtotal/i,
+  /^assets?$/i, /^liabilities?$/i, /^fund balance/i,
+  /^total assets/i, /^total liabilities/i, /^total fund/i,
+];
+function isPCSkipRow(row) {
+  // A skip row has no valid account code (first non-empty cell isn't purely numeric)
+  const firstNonEmpty = row.find(c=>(c||'').toString().trim()!=='');
+  if (!firstNonEmpty) return true;
+  const text = firstNonEmpty.toString().trim();
+  // If it looks like a section label or total label → skip
+  return PC_SKIP_PATTERNS.some(p=>p.test(text));
 }
 
 // ── After reading rows, try auto-parse. If standard PC format detected go straight
@@ -3904,8 +3942,14 @@ function processImportRows(tab, allRows) {
 
   const cols = detectPCColumns(headerRow);
 
+  // For IS tab: prefer YTD column, then MTD, then currentIdx
+  if (tab === 'is') {
+    if (cols.ytdIdx >= 0)   cols.currentIdx = cols.ytdIdx;
+    else if (cols.mtdIdx >= 0) cols.currentIdx = cols.mtdIdx;
+  }
+
   // If we found a code column AND at least one balance/debit column → auto-parse directly
-  const hasPCBal   = cols.currentIdx>=0 || cols.beginIdx>=0 || cols.periodIdx>=0;
+  const hasPCBal   = cols.currentIdx>=0 || cols.beginIdx>=0 || cols.periodIdx>=0 || cols.ytdIdx>=0 || cols.mtdIdx>=0;
   const hasDCCols  = cols.debitIdx>=0 && cols.creditIdx>=0;
   const hasCodeCol = cols.codeIdx>=0;
 
@@ -3928,41 +3972,66 @@ function autoPreviewImport(tab, cols, dataRows, isPCMode) {
     return neg ? -n : n;
   };
 
-  const codeCol    = cols.codeIdx;
-  const nameCol    = cols.nameIdx;
+  const isIS      = tab === 'is';
+  const codeCol   = cols.codeIdx;
+  const nameCol   = cols.nameIdx;
+  // For IS: currentIdx was already set to YTD or MTD in processImportRows
   const currentCol = cols.currentIdx >= 0 ? cols.currentIdx
-                   : cols.periodIdx  >= 0 ? cols.periodIdx
+                   : cols.ytdIdx    >= 0 ? cols.ytdIdx
+                   : cols.mtdIdx    >= 0 ? cols.mtdIdx
+                   : cols.periodIdx >= 0 ? cols.periodIdx
                    : cols.beginIdx;
-  const beginCol   = cols.beginIdx;
-  const periodCol  = cols.periodIdx;
-  const debitCol   = cols.debitIdx;
-  const creditCol  = cols.creditIdx;
+  const beginCol  = cols.beginIdx;
+  const periodCol = isIS ? (cols.mtdIdx >= 0 ? cols.mtdIdx : cols.periodIdx) : cols.periodIdx;
+  const ytdCol    = cols.ytdIdx;
+  const debitCol  = cols.debitIdx;
+  const creditCol = cols.creditIdx;
 
-  let totalDb=0, totalCr=0;
+  let totalIncome=0, totalExpense=0, totalDb=0, totalCr=0;
   const parsed=[];
 
   dataRows.forEach(r => {
+    // Skip section headers, totals, blank rows
+    if (isPCSkipRow(r)) return;
+
     const code = (r[codeCol]||'').toString().trim();
     if (!code) return;
-    // Skip rows that look like subtotals/totals/headers (no numeric balance anywhere)
-    const joined = r.join(' ').toLowerCase();
-    if (/^(total|subtotal|net |grand total|assets|liabilities|fund balance|income|expense|revenue)/i.test(joined) && !code.match(/^\d/)) return;
+    // Account code must start with a digit
+    if (!/^\d/.test(code)) return;
 
     const name = nameCol>=0 ? (r[nameCol]||'').toString().trim() : '';
     const acct = coaCache.find(a=>a.code===code);
+    const displayName = name || acct?.name || '';
+    const codeNum = parseInt(code)||0;
 
     if (isPCMode) {
-      // Power Church single-balance mode
       if (currentCol < 0) return;
-      const currentBal = parseAmt(r[currentCol]);
-      if (!currentBal && !name) return;
+      const rawAmt = parseAmt(r[currentCol]);
+      const absAmt = Math.abs(rawAmt);
+      if (!absAmt) return;
 
-      const codeNum = parseInt(code)||0;
-      let normalDC;
-      if (tab==='is') {
-        normalDC = (codeNum>=5000&&codeNum<=5999) ? 'CR' : 'DB';
+      let debit=0, credit=0;
+
+      if (isIS) {
+        // Income & Expense Statement:
+        // Power Church shows ALL amounts as positive.
+        // 4xxx = Income  → stored as DB (confirmed user convention)
+        // 5xxx = Expense → stored as CR (confirmed user convention)
+        if (codeNum>=4000&&codeNum<=4999) {
+          debit  = absAmt;
+          totalIncome += absAmt;
+        } else if (codeNum>=5000&&codeNum<=5999) {
+          credit = absAmt;
+          totalExpense += absAmt;
+        } else {
+          // Unknown range — fall back to COA dc or treat as income
+          const dc = acct?.dc || 'DB';
+          if (dc==='DB') debit=absAmt; else credit=absAmt;
+          totalIncome += absAmt;
+        }
       } else {
-        normalDC = acct?.dc;
+        // Trial Balance — standard accounting sides
+        let normalDC = acct?.dc;
         if (!normalDC) {
           if      (codeNum>=4000&&codeNum<=4999) normalDC='CR';
           else if (codeNum>=5000&&codeNum<=5999) normalDC='DB';
@@ -3970,27 +4039,28 @@ function autoPreviewImport(tab, cols, dataRows, isPCMode) {
           else if (codeNum>=2000&&codeNum<=2999) normalDC='CR';
           else                                   normalDC='DB';
         }
+        if (normalDC==='DB') { if(rawAmt>=0) debit=absAmt; else credit=absAmt; }
+        else                 { if(rawAmt>=0) credit=absAmt; else debit=absAmt; }
       }
-      let debit=0, credit=0;
-      const absVal = Math.abs(currentBal);
-      if (absVal > 0) {
-        if (normalDC==='DB') { if(currentBal>0) debit=absVal; else credit=absVal; }
-        else                 { if(currentBal>0) credit=absVal; else debit=absVal; }
-      }
+
       totalDb+=debit; totalCr+=credit;
       const beginBal  = beginCol>=0  ? parseAmt(r[beginCol])  : null;
       const periodBal = periodCol>=0 ? parseAmt(r[periodCol]) : null;
-      const displayName = name || (acct?.name) || '';
-      if (absVal > 0 || displayName) {
-        parsed.push({code, name:displayName, debit, credit, matched:!!acct, beginBal, periodBal, currentBal});
-      }
+      const ytdBal    = ytdCol>=0    ? parseAmt(r[ytdCol])    : null;
+
+      parsed.push({
+        code, name:displayName, debit, credit, matched:!!acct,
+        beginBal, periodBal, ytdBal, currentBal:rawAmt,
+        isIncome: codeNum>=4000&&codeNum<=4999,
+        isExpense: codeNum>=5000&&codeNum<=5999
+      });
+
     } else {
       // Debit/Credit mode
       const debit  = debitCol>=0  ? Math.max(0, parseAmt(r[debitCol]))  : 0;
       const credit = creditCol>=0 ? Math.max(0, parseAmt(r[creditCol])) : 0;
-      if (!code || (!debit && !credit)) return;
+      if (!debit && !credit) return;
       totalDb+=debit; totalCr+=credit;
-      const displayName = name || (acct?.name) || '';
       parsed.push({code, name:displayName, debit, credit, matched:!!acct});
     }
   });
@@ -4004,54 +4074,121 @@ function autoPreviewImport(tab, cols, dataRows, isPCMode) {
   importRawRows[tab+'_parsed'] = parsed;
   window['_importParsed_'+tab] = parsed;
 
-  const diff = Math.abs(totalDb-totalCr);
-  const balanced = diff < 0.01;
-  const balanceHtml = balanced
-    ? '<span class="text-green-600 font-semibold">✓ Balanced</span>'
-    : `<span class="text-red-600 font-semibold">⚠ Out of balance by ${fmt(diff)} — you can still post</span>`;
+  // ── IS-specific summary: Net Income = Total Income − Total Expenses ──
+  const netIncome = totalIncome - totalExpense;
+  const isBalanced = isIS
+    ? true  // IS is not expected to balance debit=credit; net income is the check
+    : Math.abs(totalDb-totalCr) < 0.01;
 
-  const hasPCCols = parsed.some(r=>r.beginBal!=null);
-  const rows = parsed.map(r=>`<tr>
-    <td class="font-mono text-xs">${r.code}</td>
-    <td class="text-xs">${r.name}</td>
-    ${hasPCCols?`<td class="text-right text-xs">${r.beginBal!=null?fmt(Math.abs(r.beginBal)):''}</td><td class="text-right text-xs">${r.periodBal!=null?fmt(Math.abs(r.periodBal)):''}</td>`:''}
-    <td class="text-right text-xs font-semibold">${r.debit>0?fmt(r.debit):''}</td>
-    <td class="text-right text-xs font-semibold">${r.credit>0?fmt(r.credit):''}</td>
-    <td class="text-xs">${r.matched?'<span class="text-green-600">✓</span>':'<span class="text-orange-500">New</span>'}</td>
-  </tr>`).join('');
+  let balanceHtml;
+  if (isIS) {
+    balanceHtml = `
+      <span class="text-gray-700">Total Income: <strong>${fmt(totalIncome)}</strong></span>
+      <span class="mx-2 text-gray-400">|</span>
+      <span class="text-gray-700">Total Expenses: <strong>${fmt(totalExpense)}</strong></span>
+      <span class="mx-2 text-gray-400">|</span>
+      <span class="${netIncome>=0?'text-green-600':'text-red-600'} font-semibold">
+        ${netIncome>=0?'Surplus':'Deficit'}: ${fmt(Math.abs(netIncome))}
+      </span>`;
+  } else {
+    const diff = Math.abs(totalDb-totalCr);
+    balanceHtml = isBalanced
+      ? '<span class="text-green-600 font-semibold">✓ Balanced</span>'
+      : `<span class="text-red-600 font-semibold">⚠ Out of balance by ${fmt(diff)} — you can still post</span>`;
+  }
+
+  // ── Build table ──
+  const hasBegCol  = !isIS && parsed.some(r=>r.beginBal!=null);
+  const hasMTDCol  =  isIS && parsed.some(r=>r.periodBal!=null);
+  const hasYTDCol  =  isIS && parsed.some(r=>r.ytdBal!=null);
+
+  const tableRows = parsed.map(r => {
+    const sideLabel = isIS
+      ? (r.isIncome?'<span class="text-blue-600 font-semibold">Income</span>':'<span class="text-orange-600 font-semibold">Expense</span>')
+      : (r.matched?'<span class="text-green-600">✓</span>':'<span class="text-orange-500">New</span>');
+    return `<tr>
+      <td class="font-mono text-xs">${r.code}</td>
+      <td class="text-xs">${r.name}</td>
+      ${hasBegCol ? `<td class="text-right text-xs">${r.beginBal!=null?fmt(Math.abs(r.beginBal)):''}</td>` : ''}
+      ${hasMTDCol ? `<td class="text-right text-xs">${r.periodBal!=null?fmt(Math.abs(r.periodBal)):''}</td>` : ''}
+      ${hasYTDCol ? `<td class="text-right text-xs font-semibold">${r.ytdBal!=null?fmt(Math.abs(r.ytdBal)):''}</td>` : ''}
+      ${!isIS ? `<td class="text-right text-xs font-semibold">${r.debit>0?fmt(r.debit):''}</td>
+                 <td class="text-right text-xs font-semibold">${r.credit>0?fmt(r.credit):''}</td>` : ''}
+      ${isIS  ? `<td class="text-right text-xs font-semibold">${fmt(Math.abs(r.currentBal))}</td>` : ''}
+      <td class="text-xs">${sideLabel}</td>
+    </tr>`;
+  }).join('');
+
+  // Totals footer
+  let tfootCols;
+  if (isIS) {
+    const colSpan = 2 + (hasMTDCol?1:0) + (hasYTDCol?1:0);
+    tfootCols = `
+      <tr class="font-bold bg-gray-50 text-xs">
+        <td colspan="${colSpan}">TOTALS</td>
+        <td class="text-right text-blue-700">${fmt(totalIncome)}</td>
+        <td class="text-right text-orange-700"></td>
+      </tr>
+      <tr class="font-bold bg-blue-50 text-xs">
+        <td colspan="${colSpan}">Total Income</td>
+        <td class="text-right text-blue-700">${fmt(totalIncome)}</td>
+        <td></td>
+      </tr>
+      <tr class="font-bold bg-orange-50 text-xs">
+        <td colspan="${colSpan}">Total Expenses</td>
+        <td class="text-right text-orange-700">${fmt(totalExpense)}</td>
+        <td></td>
+      </tr>
+      <tr class="font-bold text-xs" style="background:#1a3c8f;color:white;">
+        <td colspan="${colSpan}">Excess Income over Expense (Net)</td>
+        <td class="text-right">${fmt(Math.abs(netIncome))}</td>
+        <td class="text-xs">${netIncome>=0?'Surplus':'Deficit'}</td>
+      </tr>`;
+  } else {
+    const colSpan = 2 + (hasBegCol?1:0);
+    tfootCols = `<tr class="font-bold bg-gray-50 text-xs">
+      <td colspan="${colSpan}">TOTALS</td>
+      <td class="text-right">${fmt(totalDb)}</td>
+      <td class="text-right">${fmt(totalCr)}</td>
+      <td></td>
+    </tr>`;
+  }
+
+  // Column headers
+  let colHeaders = `<th>Code</th><th>Description</th>`;
+  if (hasBegCol)  colHeaders += `<th>Beg Balance</th>`;
+  if (hasMTDCol)  colHeaders += `<th>Month to Date</th>`;
+  if (hasYTDCol)  colHeaders += `<th>Year to Date (YTD)</th>`;
+  if (!isIS)      colHeaders += `<th>Debit (Opening)</th><th>Credit (Opening)</th>`;
+  if (isIS)       colHeaders += `<th>Amount</th>`;
+  colHeaders += `<th>${isIS?'Type':'COA'}</th>`;
 
   const bodyHTML=`
     <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3 text-sm text-blue-800">
-      ✅ <strong>${parsed.length} accounts</strong> auto-detected from Power Church format.
+      ✅ <strong>${parsed.length} accounts</strong> auto-detected from Power Church ${isIS?'Income & Expense Statement':'Trial Balance'} format.
       <button type="button" onclick="closeModal();showColumnMapper('${tab}')" class="ml-2 text-xs underline text-blue-600">Manual mapping</button>
     </div>
-    <div class="flex items-center justify-between mb-3">
-      <span class="text-sm font-semibold text-gray-700">${parsed.length} accounts — review before posting</span>
-      <div>${balanceHtml}</div>
+    <div class="flex flex-wrap items-center gap-3 mb-3 text-sm">
+      ${balanceHtml}
     </div>
     <div class="overflow-y-auto" style="max-height:340px;">
       <table class="tbl text-xs w-full">
-        <thead><tr>
-          <th>Code</th><th>Description</th>
-          ${hasPCCols?'<th>Beg Balance</th><th>Period Actual</th>':''}
-          <th>Debit (Opening)</th><th>Credit (Opening)</th><th>COA</th>
-        </tr></thead>
-        <tbody>${rows}</tbody>
-        <tfoot><tr class="font-bold bg-gray-50 text-xs">
-          <td colspan="${hasPCCols?4:2}">TOTALS</td>
-          <td class="text-right">${fmt(totalDb)}</td>
-          <td class="text-right">${fmt(totalCr)}</td>
-          <td></td>
-        </tr></tfoot>
+        <thead><tr>${colHeaders}</tr></thead>
+        <tbody>${tableRows}</tbody>
+        <tfoot>${tfootCols}</tfoot>
       </table>
     </div>`;
 
+  const postLabel = isIS
+    ? 'Post Income Statement Journal Entry'
+    : 'Post Opening Balance Journal Entry';
+
   const footerHTML=`
     <button type="button" onclick="closeModal()" class="btn-secondary">Cancel</button>
-    <button type="button" onclick="confirmImport('${tab}')" class="btn-primary">Post Opening Balance Journal Entry</button>`;
+    <button type="button" onclick="confirmImport('${tab}')" class="btn-primary">${postLabel}</button>`;
 
   openModal(
-    tab==='tb'?'Preview — Opening Balance Import':'Preview — YTD Income Statement Import',
+    isIS ? 'Preview — Income & Expense Statement Import' : 'Preview — Opening Balance Import',
     bodyHTML, footerHTML
   );
 }
@@ -4597,7 +4734,7 @@ async function confirmImport(tab) {
     const amt=Math.abs(r.debit||0)+Math.abs(r.credit||0);
     if(!amt) return [];
     if(tab==='is'){
-      // IS: classify by account code — 4xxx=Income(DB), 5xxx=Expense(CR)
+      // IS: Income (4xxx) → DB, Expense (5xxx) → CR  (confirmed user convention)
       const codeNum=parseInt(r.code)||0;
       const dc=(codeNum>=5000&&codeNum<=5999)?'CR':'DB';
       return [{account_code:r.code, dc, amount:amt, description:r.name}];
@@ -4609,9 +4746,30 @@ async function confirmImport(tab) {
     }
   }).flat();
 
+  // ── For IS import: add a balancing Net Income line to Fund Balance (3000) ──
+  // Income lines are DB, Expense lines are CR.
+  // Net Income = Total Income DB − Total Expense CR
+  // To balance the journal: if surplus → CR to Fund Balance 3000; if deficit → DB to Fund Balance 3000
+  if(tab==='is'){
+    const totalIncomeDB = lines.filter(l=>l.dc==='DB').reduce((s,l)=>s+l.amount,0);
+    const totalExpCR    = lines.filter(l=>l.dc==='CR').reduce((s,l)=>s+l.amount,0);
+    const net = totalIncomeDB - totalExpCR;
+    if(Math.abs(net)>0.005){
+      const fundAcct = coaCache.find(a=>a.code==='3000')||{code:'3000'};
+      // Surplus (income > expense): DB side is higher → add CR to balance
+      // Deficit  (expense > income): CR side is higher → add DB to balance
+      lines.push({
+        account_code:'3000',
+        dc: net>0?'CR':'DB',
+        amount:Math.abs(net),
+        description:'Excess Income over Expense (Net)'
+      });
+    }
+  }
+
   const totalDb=lines.filter(l=>l.dc==='DB').reduce((s,l)=>s+l.amount,0);
   const totalCr=lines.filter(l=>l.dc==='CR').reduce((s,l)=>s+l.amount,0);
-  const desc=tab==='tb'?`Opening Balance Import — ${src}`:`YTD Income Statement Import — ${src}`;
+  const desc=tab==='tb'?`Opening Balance Import — ${src}`:`Income & Expense Statement Import — ${src}`;
 
   const refNo = tab==='is'?'IS-IMPORT':'OB-IMPORT';
 
