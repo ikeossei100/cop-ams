@@ -17,7 +17,7 @@ tailwind.config = {
   theme: {
     extend: {
       colors: {
-        cop: { blue:'#0284c7', sky:'#38bdf8', gold:'#B8860B', dark:'#1a1a2e', surface:'#f0f4f8' }
+        cop: { blue:'#1a3c8f', sky:'#FFD700', gold:'#FFD700', dark:'#1a1a2e', surface:'#f0f4f8' }
       },
       fontFamily: {
         sans: ['Inter','sans-serif'],
@@ -33,8 +33,8 @@ tailwind.config = {
 
   /* ── Sidebar ── */
   .sidebar-item { transition: background 0.15s, color 0.15s, border-color 0.15s; border-left: 3px solid transparent; }
-  .sidebar-item:hover { background:rgba(56,189,248,0.1); color:#38bdf8; border-left-color:rgba(56,189,248,0.4); }
-  .sidebar-item.active { background:linear-gradient(90deg,rgba(2,132,199,0.25),rgba(2,132,199,0.08)); color:#fff; border-left-color:#0284c7; font-weight:600; }
+  .sidebar-item:hover { background:rgba(255,215,0,0.08); color:#FFD700; border-left-color:rgba(255,215,0,0.5); }
+  .sidebar-item.active { background:linear-gradient(90deg,rgba(255,215,0,0.18),rgba(255,215,0,0.04)); color:#fff; border-left-color:#FFD700; font-weight:600; }
 
   /* ── Screens ── */
   .screen { display:none; }
@@ -43,15 +43,15 @@ tailwind.config = {
 
   /* ── Buttons ── */
   .btn-primary {
-    background: linear-gradient(135deg,#0284c7,#0369a1);
+    background: linear-gradient(135deg,#1a3c8f,#152f72);
     color:#fff; padding:0.45rem 1.1rem; border-radius:8px;
     font-size:0.875rem; font-weight:600; cursor:pointer; border:none;
     transition: background 0.15s, transform 0.1s, box-shadow 0.15s;
-    box-shadow: 0 2px 6px rgba(2,132,199,0.35);
+    box-shadow: 0 2px 6px rgba(26,60,143,0.35);
   }
-  .btn-primary:hover { background:linear-gradient(135deg,#0369a1,#025585); box-shadow:0 4px 12px rgba(2,132,199,0.45); }
+  .btn-primary:hover { background:linear-gradient(135deg,#152f72,#0e2159); box-shadow:0 4px 12px rgba(26,60,143,0.45); }
   .btn-primary:active { transform:scale(0.98); }
-  .btn-primary:focus-visible { outline:2px solid #38bdf8; outline-offset:2px; }
+  .btn-primary:focus-visible { outline:2px solid #FFD700; outline-offset:2px; }
 
   .btn-secondary {
     background:#fff; color:#374151; padding:0.45rem 1.1rem; border-radius:8px;
@@ -62,16 +62,16 @@ tailwind.config = {
   }
   .btn-secondary:hover { background:#f8fafc; border-color:#94a3b8; box-shadow:0 2px 6px rgba(0,0,0,0.08); }
   .btn-secondary:active { transform:scale(0.98); }
-  .btn-secondary:focus-visible { outline:2px solid #0284c7; outline-offset:2px; }
+  .btn-secondary:focus-visible { outline:2px solid #1a3c8f; outline-offset:2px; }
 
   .btn-gold {
-    background:linear-gradient(135deg,#B8860B,#9a720a);
+    background:linear-gradient(135deg,#d4a800,#b89000);
     color:#fff; padding:0.45rem 1.1rem; border-radius:8px;
     font-size:0.875rem; font-weight:600; cursor:pointer; border:none;
     transition: background 0.15s, transform 0.1s, box-shadow 0.15s;
     box-shadow: 0 2px 6px rgba(184,134,11,0.35);
   }
-  .btn-gold:hover { background:linear-gradient(135deg,#9a720a,#7a5b08); }
+  .btn-gold:hover { background:linear-gradient(135deg,#b89000,#9a7800); }
   .btn-gold:active { transform:scale(0.98); }
 
   .btn-danger {
@@ -92,7 +92,7 @@ tailwind.config = {
     transition: border-color 0.15s, box-shadow 0.15s;
     color:#1e293b;
   }
-  .form-input:focus { border-color:#0284c7; box-shadow:0 0 0 3px rgba(2,132,199,0.15); }
+  .form-input:focus { border-color:#1a3c8f; box-shadow:0 0 0 3px rgba(26,60,143,0.15); }
   .form-input:hover:not(:focus) { border-color:#94a3b8; }
 
   .form-label {
@@ -114,29 +114,29 @@ tailwind.config = {
   /* ── Tables ── */
   .tbl { width:100%; border-collapse:separate; border-spacing:0; font-size:0.83rem; border-radius:10px; overflow:hidden; border:1px solid #e2e8f0; }
   .tbl thead { position:sticky; top:0; z-index:2; }
-  .tbl th { background:linear-gradient(135deg,#0284c7,#0369a1); color:#fff; padding:10px 14px; text-align:left; font-weight:700; font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em; }
+  .tbl th { background:linear-gradient(135deg,#1a3c8f,#152f72); color:#fff; padding:10px 14px; text-align:left; font-weight:700; font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em; }
   .tbl td { padding:9px 14px; border-bottom:1px solid #f1f5f9; color:#374151; }
   .tbl tr:last-child td { border-bottom:none; }
-  .tbl tbody tr:hover td { background:#eff6ff; }
+  .tbl tbody tr:hover td { background:#eef1fb; }
   .tbl tbody tr:nth-child(even) td { background:#f8fafc; }
-  .tbl tbody tr:nth-child(even):hover td { background:#eff6ff; }
+  .tbl tbody tr:nth-child(even):hover td { background:#eef1fb; }
 
   /* ── Stat cards ── */
   .stat-card {
     background:#fff; border-radius:14px; padding:1.3rem 1.5rem;
     box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04);
-    border-left: 4px solid #0284c7;
+    border-left: 4px solid #1a3c8f;
     position: relative; overflow: hidden;
   }
   .stat-card::after {
     content:''; position:absolute; top:-20px; right:-20px;
     width:80px; height:80px; border-radius:50%;
-    background:rgba(2,132,199,0.06);
+    background:rgba(26,60,143,0.06);
     pointer-events:none;
   }
 
   /* ── COA tree ── */
-  .coa-group  { font-weight:700; color:#0284c7; }
+  .coa-group  { font-weight:700; color:#1a3c8f; }
   .coa-sub    { padding-left:1.5rem; }
   .coa-detail { padding-left:3rem; color:#374151; }
   .journal-line-row { border-bottom:1px solid #f1f5f9; }
@@ -151,7 +151,7 @@ tailwind.config = {
   }
   .toast.success { border-left:4px solid #10b981; }
   .toast.error   { border-left:4px solid #ef4444; }
-  .toast.info    { border-left:4px solid #0284c7; }
+  .toast.info    { border-left:4px solid #1a3c8f; }
   @keyframes slideUp { from { transform:translateY(24px); opacity:0; } to { transform:translateY(0); opacity:1; } }
 
   /* ── Scrollbar ── */
@@ -171,7 +171,7 @@ tailwind.config = {
 
   /* ── Tabs ── */
   .tab-btn { padding:0.5rem 1.1rem; font-size:0.875rem; font-weight:600; border-radius:8px 8px 0 0; border-bottom:2px solid transparent; cursor:pointer; transition:color 0.15s,border-color 0.15s,background 0.15s; color:#64748b; background:transparent; }
-  .tab-btn.active { color:#0284c7; border-bottom-color:#0284c7; background:#fff; }
+  .tab-btn.active { color:#1a3c8f; border-bottom-color:#FFD700; background:#fff; }
   .tab-btn:hover:not(.active) { color:#374151; background:#f1f5f9; }
 
   /* ── Page section headers ── */
@@ -193,21 +193,21 @@ tailwind.config = {
 <body class="min-h-screen">
 
 <!-- ═══════════════ AUTH SCREEN ═══════════════ -->
-<div id="auth-screen" class="min-h-screen flex items-center justify-center" style="background:linear-gradient(145deg,#0f172a 0%,#1e3a5f 55%,#0369a1 100%);">
+<div id="auth-screen" class="min-h-screen flex items-center justify-center" style="background:linear-gradient(145deg,#0a0f2e 0%,#152060 55%,#1a3c8f 100%);">
   <!-- Decorative circles -->
-  <div style="position:absolute;top:-80px;right:-80px;width:320px;height:320px;border-radius:50%;background:rgba(56,189,248,0.07);pointer-events:none;"></div>
-  <div style="position:absolute;bottom:-60px;left:-60px;width:240px;height:240px;border-radius:50%;background:rgba(2,132,199,0.08);pointer-events:none;"></div>
+  <div style="position:absolute;top:-80px;right:-80px;width:320px;height:320px;border-radius:50%;background:rgba(255,215,0,0.07);pointer-events:none;"></div>
+  <div style="position:absolute;bottom:-60px;left:-60px;width:240px;height:240px;border-radius:50%;background:rgba(26,60,143,0.08);pointer-events:none;"></div>
 
   <div class="w-full max-w-md px-4 relative z-10">
     <div style="background:#fff;border-radius:20px;padding:2.5rem;box-shadow:0 24px 64px rgba(0,0,0,0.3),0 4px 16px rgba(0,0,0,0.15);">
       <!-- Logo -->
       <div class="text-center mb-8">
-        <div class="inline-flex items-center justify-center w-18 h-18 rounded-2xl mb-4" style="width:72px;height:72px;background:linear-gradient(135deg,#0284c7,#0ea5e9);box-shadow:0 8px 24px rgba(2,132,199,0.4);">
-          <svg viewBox="0 0 40 40" fill="none" class="w-10 h-10"><path d="M20 4L4 14v12l16 10 16-10V14L20 4z" fill="white" fill-opacity="0.95"/><path d="M20 12l-8 5v6l8 5 8-5v-6l-8-5z" fill="rgba(2,132,199,0.6)"/></svg>
+        <div class="inline-flex items-center justify-center mb-4" style="width:90px;height:90px;">
+          <img src="logo/WhatsApp Image 2026-04-05 at 9.49.21 PM.jpeg" alt="COP Logo" style="width:90px;height:90px;object-fit:contain;border-radius:50%;box-shadow:0 8px 28px rgba(26,60,143,0.4),0 2px 8px rgba(0,0,0,0.2);">
         </div>
         <h1 style="font-family:'Playfair Display',serif;font-size:1.6rem;font-weight:700;color:#1e293b;letter-spacing:-0.02em;line-height:1.2;">Church of Pentecost</h1>
         <p style="font-size:0.8rem;color:#64748b;margin-top:4px;font-weight:500;letter-spacing:0.04em;text-transform:uppercase;">Canada — Accounting Management System</p>
-        <div style="width:40px;height:3px;background:linear-gradient(90deg,#0284c7,#38bdf8);border-radius:2px;margin:12px auto 0;"></div>
+        <div style="width:40px;height:3px;background:linear-gradient(90deg,#1a3c8f,#FFD700);border-radius:2px;margin:12px auto 0;"></div>
       </div>
 
       <div id="auth-error" class="hidden mb-4 p-3 rounded-lg text-sm" style="background:#fef2f2;border:1.5px solid #fecaca;color:#b91c1c;"></div>
@@ -235,14 +235,14 @@ tailwind.config = {
 
   <!-- SIDEBAR -->
   <div id="sidebar" class="flex-shrink-0 w-64 text-gray-200 flex flex-col overflow-y-auto transition-all duration-200" style="min-height:100vh;background:linear-gradient(180deg,#0f172a 0%,#1a1a2e 100%);">
-    <div class="px-4 py-5 border-b border-white/10" style="background:rgba(2,132,199,0.12);">
+    <div class="px-4 py-5 border-b border-white/10" style="background:rgba(26,60,143,0.12);">
       <div class="flex items-center gap-3">
-        <div class="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style="background:linear-gradient(135deg,#0284c7,#0ea5e9);box-shadow:0 4px 10px rgba(2,132,199,0.4);">
-          <svg viewBox="0 0 40 40" fill="none" class="w-5 h-5"><path d="M20 4L4 14v12l16 10 16-10V14L20 4z" fill="white"/></svg>
+        <div class="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 overflow-hidden" style="box-shadow:0 4px 10px rgba(26,60,143,0.4);">
+          <img src="logo/WhatsApp Image 2026-04-05 at 9.49.21 PM.jpeg" alt="COP" style="width:36px;height:36px;object-fit:cover;border-radius:10px;">
         </div>
         <div>
           <div class="text-sm font-bold text-white leading-tight" style="font-family:'Playfair Display',serif;">COP Canada</div>
-          <div class="text-xs" style="color:#7dd3fc;">General Fund AMS</div>
+          <div class="text-xs" style="color:#93b4f0;">General Fund AMS</div>
         </div>
       </div>
     </div>
@@ -300,7 +300,7 @@ tailwind.config = {
     <!-- User info at bottom -->
     <div class="px-4 py-3 border-t border-white/10">
       <div class="flex items-center gap-2">
-        <div class="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold text-white flex-shrink-0" id="user-avatar" style="background:linear-gradient(135deg,#0284c7,#0ea5e9);">?</div>
+        <div class="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold text-white flex-shrink-0" id="user-avatar" style="background:linear-gradient(135deg,#1a3c8f,#2451b3);">?</div>
         <div class="flex-1 min-w-0">
           <div class="text-xs font-semibold text-white truncate" id="user-name">User</div>
           <div class="text-xs text-gray-400" id="user-role-badge">—</div>
@@ -320,12 +320,12 @@ tailwind.config = {
         <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
       </button>
       <div class="flex-1 flex items-center gap-2">
-        <div style="width:3px;height:18px;background:#0284c7;border-radius:2px;"></div>
+        <div style="width:3px;height:18px;background:#1a3c8f;border-radius:2px;"></div>
         <h2 class="font-semibold text-gray-800 text-sm" id="page-title">Dashboard</h2>
       </div>
       <div class="text-xs text-gray-400 font-medium" id="header-period">FY <span id="current-year"></span></div>
       <div class="w-px h-5 bg-gray-200 mx-1"></div>
-      <span class="text-xs font-semibold px-3 py-1 rounded-full" id="header-role-badge" style="background:#dbeafe;color:#1d4ed8;letter-spacing:0.04em;">—</span>
+      <span class="text-xs font-semibold px-3 py-1 rounded-full" id="header-role-badge" style="background:#dce5ff;color:#1a3c8f;letter-spacing:0.04em;">—</span>
     </header>
 
     <!-- Screen content -->
@@ -370,7 +370,7 @@ tailwind.config = {
         <div class="text-xs text-gray-500 uppercase tracking-wide mb-1" id="dash-income-label">Income (YTD)</div>
         <div class="text-xl font-bold text-gray-800" id="dash-income">$0.00</div>
       </div>
-      <div class="stat-card" style="border-left-color:#B8860B;">
+      <div class="stat-card" style="border-left-color:#d4a800;">
         <div class="text-xs text-gray-500 uppercase tracking-wide mb-1" id="dash-expense-label">Expenses (YTD)</div>
         <div class="text-xl font-bold text-gray-800" id="dash-expense">$0.00</div>
       </div>
@@ -664,37 +664,37 @@ tailwind.config = {
 <!-- ═══ REPORTS ═══ -->
 <div id="screen-reports" class="screen">
   <div class="grid md:grid-cols-4 gap-4 mb-5">
-    <div class="card p-4 cursor-pointer hover:border-[#0284c7] hover:border transition-colors" onclick="runReport('income-statement')" style="border:2px solid transparent;">
+    <div class="card p-4 cursor-pointer hover:border-[#1a3c8f] hover:border transition-colors" onclick="runReport('income-statement')" style="border:2px solid transparent;">
       <div class="text-2xl mb-1">📊</div>
       <div class="font-semibold text-sm text-gray-700">Income Statement</div>
       <div class="text-xs text-gray-400 mt-1">P&L by account code</div>
     </div>
-    <div class="card p-4 cursor-pointer hover:border-[#0284c7] hover:border transition-colors" onclick="runReport('balance-sheet')" style="border:2px solid transparent;">
+    <div class="card p-4 cursor-pointer hover:border-[#1a3c8f] hover:border transition-colors" onclick="runReport('balance-sheet')" style="border:2px solid transparent;">
       <div class="text-2xl mb-1">⚖️</div>
       <div class="font-semibold text-sm text-gray-700">Balance Sheet</div>
       <div class="text-xs text-gray-400 mt-1">Assets, liabilities, equity</div>
     </div>
-    <div class="card p-4 cursor-pointer hover:border-[#0284c7] hover:border transition-colors" onclick="runReport('trial-balance')" style="border:2px solid transparent;">
+    <div class="card p-4 cursor-pointer hover:border-[#1a3c8f] hover:border transition-colors" onclick="runReport('trial-balance')" style="border:2px solid transparent;">
       <div class="text-2xl mb-1">🔢</div>
       <div class="font-semibold text-sm text-gray-700">Trial Balance</div>
       <div class="text-xs text-gray-400 mt-1">All debits and credits</div>
     </div>
-    <div class="card p-4 cursor-pointer hover:border-[#0284c7] hover:border transition-colors" onclick="runReport('contrib-distribution')" style="border:2px solid transparent;">
+    <div class="card p-4 cursor-pointer hover:border-[#1a3c8f] hover:border transition-colors" onclick="runReport('contrib-distribution')" style="border:2px solid transparent;">
       <div class="text-2xl mb-1">🏛️</div>
       <div class="font-semibold text-sm text-gray-700">Contribution Report</div>
       <div class="text-xs text-gray-400 mt-1">By district & category</div>
     </div>
-    <div class="card p-4 cursor-pointer hover:border-[#0284c7] hover:border transition-colors" onclick="runReport('general-ledger')" style="border:2px solid transparent;">
+    <div class="card p-4 cursor-pointer hover:border-[#1a3c8f] hover:border transition-colors" onclick="runReport('general-ledger')" style="border:2px solid transparent;">
       <div class="text-2xl mb-1">📋</div>
       <div class="font-semibold text-sm text-gray-700">General Ledger</div>
       <div class="text-xs text-gray-400 mt-1">Running balance per account</div>
     </div>
-    <div class="card p-4 cursor-pointer hover:border-[#0284c7] hover:border transition-colors" onclick="runReport('cash-flow')" style="border:2px solid transparent;">
+    <div class="card p-4 cursor-pointer hover:border-[#1a3c8f] hover:border transition-colors" onclick="runReport('cash-flow')" style="border:2px solid transparent;">
       <div class="text-2xl mb-1">💵</div>
       <div class="font-semibold text-sm text-gray-700">Cash Flow</div>
       <div class="text-xs text-gray-400 mt-1">Cash inflows & outflows</div>
     </div>
-    <div class="card p-4 cursor-pointer hover:border-[#0284c7] hover:border transition-colors" onclick="runReport('contributor-statement')" style="border:2px solid transparent;">
+    <div class="card p-4 cursor-pointer hover:border-[#1a3c8f] hover:border transition-colors" onclick="runReport('contributor-statement')" style="border:2px solid transparent;">
       <div class="text-2xl mb-1">🧾</div>
       <div class="font-semibold text-sm text-gray-700">Contributor Statement</div>
       <div class="text-xs text-gray-400 mt-1">Individual giving statement</div>
@@ -771,7 +771,7 @@ tailwind.config = {
       <p class="text-xs text-gray-500 mb-3">View all system activity and user actions.</p>
       <button class="btn-secondary text-xs w-full" onclick="loadAuditLog()">View Audit Log</button>
     </div>
-    <div class="card p-5" style="border:2px solid rgba(2,132,199,0.2);">
+    <div class="card p-5" style="border:2px solid rgba(26,60,143,0.2);">
       <div class="text-2xl mb-2">📂</div>
       <div class="font-semibold text-gray-700 mb-1">Import Opening Balances</div>
       <p class="text-xs text-gray-500 mb-3">Bring in balances from another software (CSV or Excel) and continue your books from there.</p>
@@ -791,7 +791,7 @@ tailwind.config = {
 
     <!-- Import type tabs -->
     <div class="flex gap-2 mb-4 border-b border-gray-200 pb-1">
-      <button id="imp-tab-tb" onclick="setImportTab('tb')" class="text-xs px-3 py-1.5 rounded-t font-semibold" style="background:#0284c7;color:#fff;">Trial Balance / Opening Balances</button>
+      <button id="imp-tab-tb" onclick="setImportTab('tb')" class="text-xs px-3 py-1.5 rounded-t font-semibold" style="background:#1a3c8f;color:#fff;">Trial Balance / Opening Balances</button>
       <button id="imp-tab-bank" onclick="setImportTab('bank')" class="text-xs px-3 py-1.5 rounded-t font-semibold text-gray-500 hover:bg-gray-100">Bank Reconciliation Opening Balance</button>
       <button id="imp-tab-is" onclick="setImportTab('is')" class="text-xs px-3 py-1.5 rounded-t font-semibold text-gray-500 hover:bg-gray-100">YTD Income Statement</button>
     </div>
@@ -1591,11 +1591,11 @@ function renderCOA() {
   const rows = accounts.map(a => {
     const indent = a.level===1?'':a.level===2?'pl-4':'pl-8';
     return `<tr>
-      <td class="${a.type==='Group'?'font-semibold':''}" style="${a.type==='Group'?'color:#0284c7;':''}">${a.code}</td>
-      <td class="${indent} ${a.type==='Group'?'font-semibold':''}" style="${a.type==='Group'?'color:#0284c7;':''}">${a.name}</td>
+      <td class="${a.type==='Group'?'font-semibold':''}" style="${a.type==='Group'?'color:#1a3c8f;':''}">${a.code}</td>
+      <td class="${indent} ${a.type==='Group'?'font-semibold':''}" style="${a.type==='Group'?'color:#1a3c8f;':''}">${a.name}</td>
       <td>${a.type}</td><td>${a.category}</td><td>${a.dc}</td>
       <td><span class="badge-${a.active!==false?'posted':'reversed'}">${a.active!==false?'Active':'Inactive'}</span></td>
-      <td><button class="text-xs font-semibold hover:underline" style="color:#0284c7;" onclick="viewAccountActivity('${a.code}')">View Activity</button></td>
+      <td><button class="text-xs font-semibold hover:underline" style="color:#1a3c8f;" onclick="viewAccountActivity('${a.code}')">View Activity</button></td>
       <td>${canWrite?`<button class="text-xs text-blue-600 hover:underline mr-2" onclick='openEditAccount(${JSON.stringify(a).replace(/'/g,"&#39;")})'>Edit</button><button class="text-xs text-red-500 hover:underline" onclick="toggleAccountActive('${a.code}',${!a.active})">${a.active!==false?'Deactivate':'Activate'}</button>`:''}</td>
     </tr>`;
   }).join('');
@@ -1798,7 +1798,7 @@ async function viewAccountActivity(code) {
     <div class="stat-card"><div class="text-xs text-gray-500">Opening Balance</div><div class="font-bold text-gray-800">${fmt(Math.abs(openingBalance))} ${openingBalance<0?'Cr':'Dr'}</div></div>
     <div class="stat-card" style="border-left-color:#059669"><div class="text-xs text-gray-500">Total Debits</div><div class="font-bold text-green-700">${fmt(totalDb)}</div></div>
     <div class="stat-card" style="border-left-color:#6366f1"><div class="text-xs text-gray-500">Total Credits</div><div class="font-bold text-indigo-700">${fmt(totalCr)}</div></div>
-    <div class="stat-card" style="border-left-color:#B8860B"><div class="text-xs text-gray-500">Closing Balance</div><div class="font-bold ${closingBalance<0?'text-red-600':'text-gray-800'}">${fmt(Math.abs(closingBalance))} ${closingBalance<0?'Cr':'Dr'}</div></div>`;
+    <div class="stat-card" style="border-left-color:#d4a800"><div class="text-xs text-gray-500">Closing Balance</div><div class="font-bold ${closingBalance<0?'text-red-600':'text-gray-800'}">${fmt(Math.abs(closingBalance))} ${closingBalance<0?'Cr':'Dr'}</div></div>`;
 
   // Store for export
   currentActivityData = {code, acct, from, to, entries, openingBalance, closingBalance, totalDb, totalCr};
@@ -1830,7 +1830,7 @@ function exportAccountActivityPDF() {
   const doc=new jsPDF({orientation:'landscape',unit:'mm',format:'a4'});
 
   // Letterhead
-  doc.setFillColor(2,132,199); doc.rect(0,0,297,22,'F');
+  doc.setFillColor(26,60,143); doc.rect(0,0,297,22,'F');
   doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(15);
   doc.text('Church of Pentecost Canada Inc',14,10);
   doc.setFont('helvetica','normal'); doc.setFontSize(11);
@@ -1839,7 +1839,7 @@ function exportAccountActivityPDF() {
   doc.text(`Printed: ${new Date().toLocaleString('en-CA')}`,283,10,{align:'right'});
 
   // Title
-  doc.setTextColor(2,132,199); doc.setFont('helvetica','bold'); doc.setFontSize(15);
+  doc.setTextColor(26,60,143); doc.setFont('helvetica','bold'); doc.setFontSize(15);
   doc.text(`Account Activity — ${code} ${acct?.name||''}`,14,32);
   doc.setFont('helvetica','normal'); doc.setFontSize(11); doc.setTextColor(80,80,80);
   doc.text(`Period: ${from} to ${to}   |   Category: ${acct?.category||''}   |   Normal Balance: ${acct?.dc||''}`,14,39);
@@ -1870,7 +1870,7 @@ function exportAccountActivityPDF() {
     head:[['Date','Ref#','Description','Source','Debit (CAD)','Credit (CAD)','Balance']],
     body:tableRows,
     startY:50, theme:'striped',
-    headStyles:{fillColor:[2,132,199],textColor:[255,255,255],fontStyle:'bold',fontSize:9},
+    headStyles:{fillColor:[26,60,143],textColor:[255,255,255],fontStyle:'bold',fontSize:9},
     bodyStyles:{fontSize:9},
     columnStyles:{0:{cellWidth:20},1:{cellWidth:18},4:{halign:'right',cellWidth:24},5:{halign:'right',cellWidth:24},6:{halign:'right',cellWidth:26}},
     didParseCell:(data)=>{
@@ -2085,7 +2085,7 @@ function viewContribDetail(id) {
         <div><span class="text-gray-500 text-xs">Ref#:</span><div class="font-medium">${c.ref_no||'—'}</div></div>
         <div><span class="text-gray-500 text-xs">Account:</span><div class="font-medium text-xs">${c.account_code} – ${acct?.name||''}</div></div>
         <div><span class="text-gray-500 text-xs">District:</span><div class="font-medium">${c.district||'—'}</div></div>
-        <div><span class="text-gray-500 text-xs">Amount:</span><div class="font-bold text-lg" style="color:#0284c7;">${fmt(c.amount)}</div></div>
+        <div><span class="text-gray-500 text-xs">Amount:</span><div class="font-bold text-lg" style="color:#1a3c8f;">${fmt(c.amount)}</div></div>
         <div><span class="text-gray-500 text-xs">Status:</span><div><span class="badge-${c.status}">${c.status}</span></div></div>
         <div class="col-span-2"><span class="text-gray-500 text-xs">Description:</span><div>${c.description||'—'}</div></div>
         <div class="col-span-2"><span class="text-gray-500 text-xs">Notes:</span><div>${c.notes||'—'}</div></div>
@@ -2768,7 +2768,7 @@ async function genTrialBalance(from,to) {
     return `<tr><td>${a.code}</td><td>${a.name}</td><td class="text-right">${b.debit>0?fmt(b.debit):''}</td><td class="text-right">${b.credit>0?fmt(b.credit):''}</td></tr>`;
   }).join('');
   document.getElementById('report-content').innerHTML=`
-    <h2 class="font-display text-lg font-bold mb-1" style="color:#0284c7;">Trial Balance</h2>
+    <h2 class="font-display text-lg font-bold mb-1" style="color:#1a3c8f;">Trial Balance</h2>
     <p class="text-xs text-gray-500 mb-4">Period: ${from} to ${to}</p>
     <table class="tbl"><thead><tr><th>Code</th><th>Account</th><th class="text-right">Debit</th><th class="text-right">Credit</th></tr></thead>
     <tbody>${rows}</tbody>
@@ -2794,15 +2794,15 @@ async function genIncomeStatement(from,to) {
   }).join('');
   const net=totalIncome-totalExpense;
   document.getElementById('report-content').innerHTML=`
-    <h2 class="font-display text-lg font-bold mb-1" style="color:#0284c7;">Income Statement</h2>
+    <h2 class="font-display text-lg font-bold mb-1" style="color:#1a3c8f;">Income Statement</h2>
     <p class="text-xs text-gray-500 mb-4">Period: ${from} to ${to}</p>
-    <h3 class="font-bold mb-1 mt-3" style="color:#0369a1;">INCOME</h3>
+    <h3 class="font-bold mb-1 mt-3" style="color:#152f72;">INCOME</h3>
     <table class="tbl mb-3"><thead><tr><th>Code</th><th>Account</th><th class="text-right">Amount</th></tr></thead><tbody>${incomeRows}</tbody>
     <tfoot><tr class="font-bold bg-gray-50"><td colspan="2">Total Income</td><td class="text-right">${fmt(totalIncome)}</td></tr></tfoot></table>
-    <h3 class="font-bold mb-1" style="color:#0369a1;">EXPENDITURE</h3>
+    <h3 class="font-bold mb-1" style="color:#152f72;">EXPENDITURE</h3>
     <table class="tbl mb-3"><thead><tr><th>Code</th><th>Account</th><th class="text-right">Amount</th></tr></thead><tbody>${expenseRows}</tbody>
     <tfoot><tr class="font-bold bg-gray-50"><td colspan="2">Total Expenditure</td><td class="text-right">${fmt(totalExpense)}</td></tr></tfoot></table>
-    <div class="flex justify-between items-center border-t-2 pt-2 mt-2" style="border-color:#0284c7;">
+    <div class="flex justify-between items-center border-t-2 pt-2 mt-2" style="border-color:#1a3c8f;">
       <span class="font-bold text-base">NET SURPLUS / (DEFICIT)</span>
       <span class="font-bold text-xl ${net>=0?'text-green-700':'text-red-700'}">${net>=0?'':' ('}${fmt(Math.abs(net))}${net>=0?'':')'}</span>
     </div>`;
@@ -2833,19 +2833,19 @@ async function genBalanceSheet(from,to) {
   const currentNet=retainedIncome-retainedExpense;
   const totalEquity=liabilities.total+fundBal.total+currentNet;
   document.getElementById('report-content').innerHTML=`
-    <h2 class="font-display text-lg font-bold mb-1" style="color:#0284c7;">Balance Sheet</h2>
+    <h2 class="font-display text-lg font-bold mb-1" style="color:#1a3c8f;">Balance Sheet</h2>
     <p class="text-xs text-gray-500 mb-4">As at ${to}</p>
     <div class="grid md:grid-cols-2 gap-6">
       <div>
-        <h3 class="font-bold mb-1" style="color:#0369a1;">ASSETS</h3>
+        <h3 class="font-bold mb-1" style="color:#152f72;">ASSETS</h3>
         <table class="tbl mb-2"><thead><tr><th>Code</th><th>Account</th><th class="text-right">Amount</th></tr></thead><tbody>${assets.rows}</tbody>
         <tfoot><tr class="font-bold bg-gray-50"><td colspan="2">Total Assets</td><td class="text-right">${fmt(assets.total)}</td></tr></tfoot></table>
       </div>
       <div>
-        <h3 class="font-bold mb-1" style="color:#0369a1;">LIABILITIES</h3>
+        <h3 class="font-bold mb-1" style="color:#152f72;">LIABILITIES</h3>
         <table class="tbl mb-2"><thead><tr><th>Code</th><th>Account</th><th class="text-right">Amount</th></tr></thead><tbody>${liabilities.rows}</tbody>
         <tfoot><tr class="font-bold bg-gray-50"><td colspan="2">Total Liabilities</td><td class="text-right">${fmt(liabilities.total)}</td></tr></tfoot></table>
-        <h3 class="font-bold mb-1 mt-3" style="color:#0369a1;">FUND BALANCE</h3>
+        <h3 class="font-bold mb-1 mt-3" style="color:#152f72;">FUND BALANCE</h3>
         <table class="tbl mb-2"><thead><tr><th>Code</th><th>Account</th><th class="text-right">Amount</th></tr></thead><tbody>${fundBal.rows}
           <tr><td class="pl-4">—</td><td class="pl-4">Current Year Surplus/(Deficit)</td><td class="text-right">${fmt(currentNet)}</td></tr>
         </tbody><tfoot><tr class="font-bold bg-gray-50"><td colspan="2">Total Equity</td><td class="text-right">${fmt(totalEquity)}</td></tr></tfoot></table>
@@ -2872,7 +2872,7 @@ async function genContribDistribution(from,to) {
   }).join('');
   const grandTotal=list.reduce((s,c)=>s+(parseFloat(c.amount)||0),0);
   document.getElementById('report-content').innerHTML=`
-    <h2 class="font-display text-lg font-bold mb-1" style="color:#0284c7;">Contribution Report</h2>
+    <h2 class="font-display text-lg font-bold mb-1" style="color:#1a3c8f;">Contribution Report</h2>
     <p class="text-xs text-gray-500 mb-4">Period: ${from} to ${to} &nbsp;|&nbsp; ${list.length} record(s)</p>
     <div class="overflow-x-auto">
     <table class="tbl" id="contrib-dist-table">
@@ -2929,7 +2929,7 @@ async function genContributorStatement(from,to) {
     </tr>`;
   }).join('');
   document.getElementById('report-content').innerHTML=`
-    <h2 class="font-display text-lg font-bold mb-1" style="color:#0284c7;">Contributor Statement</h2>
+    <h2 class="font-display text-lg font-bold mb-1" style="color:#1a3c8f;">Contributor Statement</h2>
     <p class="text-xs text-gray-500 mb-4">Period: ${from} to ${to}</p>
 
     <!-- Contributor details box -->
@@ -2938,7 +2938,7 @@ async function genContributorStatement(from,to) {
         <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Contributor</p>
         <p class="font-bold text-gray-800 text-base">${first.contributor_name||name}</p>
         ${first.envelope_number
-          ? `<p class="text-sm font-bold mt-1" style="color:#0284c7;">Envelope No: ${first.envelope_number}</p>`
+          ? `<p class="text-sm font-bold mt-1" style="color:#1a3c8f;">Envelope No: ${first.envelope_number}</p>`
           : '<p class="text-xs text-gray-400 mt-0.5 italic">No envelope number assigned</p>'}
         ${first.contributor_address?`<p class="text-gray-600 mt-1">${first.contributor_address.replace(/\n/g,'<br>')}</p>`:''}
       </div>
@@ -3061,12 +3061,12 @@ function buildSingleStatementHTML(name, list, from, to, forPrint=false) {
   return `
     <div style="font-family:Inter,sans-serif;max-width:750px;margin:0 auto;padding:24px;">
       <!-- Letterhead -->
-      <div style="background:#0284c7;color:#fff;padding:14px 20px;border-radius:8px 8px 0 0;">
+      <div style="background:#1a3c8f;color:#fff;padding:14px 20px;border-radius:8px 8px 0 0;">
         <div style="font-weight:700;font-size:15px;">Church of Pentecost Canada Inc</div>
         <div style="font-size:15px;opacity:0.85;">Head Office — General Fund</div>
       </div>
       <div style="border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;padding:20px;">
-        <div style="color:#0284c7;font-weight:700;font-size:16px;margin-bottom:2px;">Contributor Statement</div>
+        <div style="color:#1a3c8f;font-weight:700;font-size:16px;margin-bottom:2px;">Contributor Statement</div>
         <div style="font-size:15px;color:#6b7280;margin-bottom:16px;">Period: ${from} to ${to} &nbsp;|&nbsp; Generated: ${new Date().toLocaleDateString('en-CA')}</div>
 
         <!-- Contributor info -->
@@ -3074,7 +3074,7 @@ function buildSingleStatementHTML(name, list, from, to, forPrint=false) {
           <div>
             <div style="font-size:16px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;">Contributor</div>
             <div style="font-weight:700;font-size:16px;color:#111827;">${first.contributor_name||name}</div>
-            ${first.envelope_number?`<div style="font-size:13px;font-weight:700;color:#0284c7;margin-top:2px;">Envelope No. ${first.envelope_number}</div>`:''}
+            ${first.envelope_number?`<div style="font-size:13px;font-weight:700;color:#1a3c8f;margin-top:2px;">Envelope No. ${first.envelope_number}</div>`:''}
             ${first.contributor_address?`<div style="font-size:14px;color:#4b5563;margin-top:3px;">${first.contributor_address.replace(/\n/g,'<br>')}</div>`:''}
           </div>
           <div style="font-size:14px;color:#4b5563;">
@@ -3087,7 +3087,7 @@ function buildSingleStatementHTML(name, list, from, to, forPrint=false) {
         <!-- Table -->
         <table style="width:100%;border-collapse:collapse;font-size:16px;">
           <thead>
-            <tr style="background:#0284c7;color:#fff;">
+            <tr style="background:#1a3c8f;color:#fff;">
               <th style="padding:7px 8px;text-align:center;width:32px;">#</th>
               <th style="padding:7px 8px;text-align:left;">Date</th>
               <th style="padding:7px 8px;text-align:left;">Ref#</th>
@@ -3101,7 +3101,7 @@ function buildSingleStatementHTML(name, list, from, to, forPrint=false) {
           <tfoot>
             <tr style="background:#f9fafb;font-weight:700;">
               <td colspan="6" style="padding:8px;text-align:right;">Total Contributions</td>
-              <td style="padding:8px;text-align:right;font-size:16px;color:#0284c7;font-weight:700;">${fmt(total)}</td>
+              <td style="padding:8px;text-align:right;font-size:16px;color:#1a3c8f;font-weight:700;">${fmt(total)}</td>
             </tr>
           </tfoot>
         </table>
@@ -3132,7 +3132,7 @@ function printAllContributorStatements(byContrib, from, to) {
   </head><body>
     <div class="no-print" style="background:#1a1a2e;color:#fff;padding:12px 20px;display:flex;align-items:center;justify-content:between;gap:12px;">
       <span style="font-size:15px;font-weight:600;">Contributor Statements — ${names.length} contributor(s) — ${from} to ${to}</span>
-      <button onclick="window.print()" style="margin-left:auto;background:#0284c7;color:#fff;border:none;padding:8px 20px;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;box-shadow:0 2px 8px rgba(2,132,199,0.35);">Print All</button>
+      <button onclick="window.print()" style="margin-left:auto;background:#1a3c8f;color:#fff;border:none;padding:8px 20px;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;box-shadow:0 2px 8px rgba(26,60,143,0.35);">Print All</button>
       <button onclick="window.close()" style="background:#374151;color:#fff;border:none;padding:8px 16px;border-radius:6px;font-size:15px;cursor:pointer;">Close</button>
     </div>
     ${statementsHTML}
@@ -3157,7 +3157,7 @@ async function exportAllContributorStatementsPDF(byContrib, from, to) {
     const total=list.reduce((s,c)=>s+(parseFloat(c.amount)||0),0);
 
     // Letterhead
-    doc.setFillColor(2,132,199); doc.rect(0,0,pageW,22,'F');
+    doc.setFillColor(26,60,143); doc.rect(0,0,pageW,22,'F');
     doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(15);
     doc.text('Church of Pentecost Canada Inc',14,10);
     doc.setFont('helvetica','normal'); doc.setFontSize(11);
@@ -3166,7 +3166,7 @@ async function exportAllContributorStatementsPDF(byContrib, from, to) {
     doc.text(`Printed: ${new Date().toLocaleString('en-CA')}`,pageW-14,10,{align:'right'});
 
     // Title
-    doc.setTextColor(2,132,199); doc.setFont('helvetica','bold'); doc.setFontSize(16);
+    doc.setTextColor(26,60,143); doc.setFont('helvetica','bold'); doc.setFontSize(16);
     doc.text('Contributor Statement',14,32);
     doc.setFont('helvetica','normal'); doc.setFontSize(11); doc.setTextColor(100,100,100);
     doc.text(`Period: ${from} to ${to}`,14,39);
@@ -3178,7 +3178,7 @@ async function exportAllContributorStatementsPDF(byContrib, from, to) {
     doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.setTextColor(17,24,39);
     doc.text(first.contributor_name||name,17,y+7);
     if(first.envelope_number){
-      doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(2,132,199);
+      doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(26,60,143);
       doc.text(`Envelope No. ${first.envelope_number}`,17,y+13);
       doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(75,85,99);
       let detailY=y+19;
@@ -3205,7 +3205,7 @@ async function exportAllContributorStatementsPDF(byContrib, from, to) {
       body:tableRows,
       foot:[['','','','','','Total',fmt(total)]],
       startY:y, theme:'striped',
-      headStyles:{fillColor:[2,132,199],textColor:[255,255,255],fontStyle:'bold',fontSize:10},
+      headStyles:{fillColor:[26,60,143],textColor:[255,255,255],fontStyle:'bold',fontSize:10},
       footStyles:{fillColor:[249,250,251],textColor:[2,132,199],fontStyle:'bold',fontSize:10},
       bodyStyles:{fontSize:10},
       columnStyles:{0:{cellWidth:8,halign:'center'},6:{halign:'right',cellWidth:24}},
@@ -3284,7 +3284,7 @@ async function genGLSingleAccount(from,to) {
   </tr>`;
 
   document.getElementById('report-content').innerHTML=`
-    <h2 class="font-display text-lg font-bold mb-1" style="color:#0284c7;">General Ledger</h2>
+    <h2 class="font-display text-lg font-bold mb-1" style="color:#1a3c8f;">General Ledger</h2>
     <p class="text-xs text-gray-500 mb-1">Account: ${acctCode} – ${acct?.name||''} &nbsp;|&nbsp; Category: ${acct?.category||''}</p>
     <p class="text-xs text-gray-500 mb-4">Period: ${from} to ${to}</p>
     <table class="tbl">
@@ -3325,7 +3325,7 @@ async function genGLAllAccounts(from,to) {
     return oa-ob||a.localeCompare(b);
   });
 
-  let html=`<h2 class="font-display text-lg font-bold mb-1" style="color:#0284c7;">General Ledger — All Accounts</h2>
+  let html=`<h2 class="font-display text-lg font-bold mb-1" style="color:#1a3c8f;">General Ledger — All Accounts</h2>
     <p class="text-xs text-gray-500 mb-5">Period: ${from} to ${to} &nbsp;|&nbsp; ${sortedCodes.length} active account(s)</p>`;
 
   let grandDb=0, grandCr=0;
@@ -3393,7 +3393,7 @@ async function genGLAllAccounts(from,to) {
   }
 
   // Grand totals
-  html+=`<div class="pt-3 mt-2 flex justify-between items-center" style="border-top:2px solid #0284c7;">
+  html+=`<div class="pt-3 mt-2 flex justify-between items-center" style="border-top:2px solid #1a3c8f;">
     <span class="font-bold text-sm">Grand Totals (all accounts)</span>
     <span class="text-sm font-bold">Debits: ${fmt(grandDb)} &nbsp;|&nbsp; Credits: ${fmt(grandCr)}</span>
   </div>`;
@@ -3446,11 +3446,11 @@ function exportReportPDF() {
   const orientation=isContrib?'landscape':'portrait';
   const pageW=isContrib?297:210;
   const doc=new jsPDF({orientation,unit:'mm',format:'a4'});
-  doc.setFillColor(2,132,199); doc.rect(0,0,pageW,22,'F');
+  doc.setFillColor(26,60,143); doc.rect(0,0,pageW,22,'F');
   doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(15);
   doc.text('Church of Pentecost Canada Inc',14,10);
   doc.setFont('helvetica','normal'); doc.setFontSize(11); doc.text('Head Office — General Fund',14,16);
-  doc.setTextColor(2,132,199); doc.setFont('helvetica','bold'); doc.setFontSize(16);
+  doc.setTextColor(26,60,143); doc.setFont('helvetica','bold'); doc.setFontSize(16);
   doc.text(title,14,32);
   doc.setFont('helvetica','normal'); doc.setFontSize(11); doc.setTextColor(100,100,100);
   doc.text(`Period: ${from} to ${to}`,14,39);
@@ -3484,7 +3484,7 @@ function exportReportPDF() {
       // Envelope number — highlighted in sky blue
       if(envText){
         lineY+=lineH;
-        doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(2,132,199);
+        doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(26,60,143);
         doc.text(envText,17,lineY);
       }
 
@@ -3502,7 +3502,7 @@ function exportReportPDF() {
     if(rows.length>0) {
       const colStyles=isContrib?{0:{cellWidth:18},1:{cellWidth:16},2:{cellWidth:42},3:{cellWidth:52},4:{cellWidth:28},5:{cellWidth:50},6:{cellWidth:22,halign:'right'}}:{};
       doc.autoTable({head:[headers],body:rows,startY:y,theme:'striped',
-        headStyles:{fillColor:[2,132,199],textColor:[255,255,255],fontStyle:'bold',fontSize:9},
+        headStyles:{fillColor:[26,60,143],textColor:[255,255,255],fontStyle:'bold',fontSize:9},
         bodyStyles:{fontSize:9},columnStyles:colStyles,margin:{left:14,right:14}});
       y=doc.lastAutoTable.finalY+8;
     }
@@ -3555,7 +3555,7 @@ function setImportTab(tab) {
   ['tb','bank','is'].forEach(t=>{
     document.getElementById('imp-body-'+t).style.display = t===tab?'block':'none';
     const btn=document.getElementById('imp-tab-'+t);
-    if(btn){ btn.style.background=t===tab?'#0284c7':''; btn.style.color=t===tab?'#fff':''; btn.className=t===tab?'text-xs px-3 py-1.5 rounded-t font-semibold':'text-xs px-3 py-1.5 rounded-t font-semibold text-gray-500 hover:bg-gray-100'; }
+    if(btn){ btn.style.background=t===tab?'#1a3c8f':''; btn.style.color=t===tab?'#fff':''; btn.className=t===tab?'text-xs px-3 py-1.5 rounded-t font-semibold':'text-xs px-3 py-1.5 rounded-t font-semibold text-gray-500 hover:bg-gray-100'; }
   });
   document.getElementById('imp-result').style.display='none';
 }
@@ -4327,7 +4327,7 @@ function exportImportPDF() {
   const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
 
   // Letterhead
-  doc.setFillColor(2,132,199); doc.rect(0,0,210,22,'F');
+  doc.setFillColor(26,60,143); doc.rect(0,0,210,22,'F');
   doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(15);
   doc.text('Church of Pentecost Canada Inc',14,10);
   doc.setFont('helvetica','normal'); doc.setFontSize(11);
@@ -4336,7 +4336,7 @@ function exportImportPDF() {
   doc.text(`Printed: ${new Date().toLocaleString('en-CA')}`,196,10,{align:'right'});
 
   // Title block
-  doc.setTextColor(2,132,199); doc.setFont('helvetica','bold'); doc.setFontSize(16);
+  doc.setTextColor(26,60,143); doc.setFont('helvetica','bold'); doc.setFontSize(16);
   doc.text(rec.title,14,32);
   doc.setFont('helvetica','normal'); doc.setFontSize(11); doc.setTextColor(80,80,80);
   doc.text(`As-of Date: ${rec.date}`,14,39);
@@ -4390,7 +4390,7 @@ function exportImportPDF() {
       body:tableRows,
       foot:[['','TOTALS', footCol3, footCol4]],
       startY:y, theme:'striped',
-      headStyles:{fillColor:[2,132,199],textColor:[255,255,255],fontStyle:'bold',fontSize:10},
+      headStyles:{fillColor:[26,60,143],textColor:[255,255,255],fontStyle:'bold',fontSize:10},
       footStyles:{fillColor:[240,240,240],textColor:[40,40,40],fontStyle:'bold',fontSize:8},
       bodyStyles:{fontSize:10},
       columnStyles:{0:{cellWidth:24},2:{halign:'right',cellWidth:32},3:{halign:'right',cellWidth:32}},
@@ -4491,7 +4491,7 @@ async function loadDistrictIncomeSummary() {
       return `<tr class="${hasData?'':'opacity-40'}">
         <td class="font-medium">${a.code}</td>
         <td class="font-semibold text-gray-800">${a.name}</td>
-        <td class="text-right font-mono ${t.period>0?'font-semibold':''}" style="${t.period>0?'color:#0284c7;':''}">${t.period>0 ? fmt(t.period) : '—'}</td>
+        <td class="text-right font-mono ${t.period>0?'font-semibold':''}" style="${t.period>0?'color:#1a3c8f;':''}">${t.period>0 ? fmt(t.period) : '—'}</td>
         <td class="text-right font-mono ${t.ytd>0?'font-semibold':''}">${t.ytd>0 ? fmt(t.ytd) : '—'}</td>
       </tr>`;
     }).join('');
@@ -4499,17 +4499,17 @@ async function loadDistrictIncomeSummary() {
     body.innerHTML = `
       <!-- Summary stat cards -->
       <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-        <div class="stat-card" style="border-left-color:#0284c7;">
+        <div class="stat-card" style="border-left-color:#1a3c8f;">
           <div class="text-xs text-gray-500 uppercase tracking-wide mb-1">Period</div>
           <div class="text-xs text-gray-400 mb-1">${monthLabel} ${yr}</div>
-          <div class="text-lg font-bold" style="color:#0284c7;">${fmt(periodTotal)}</div>
+          <div class="text-lg font-bold" style="color:#1a3c8f;">${fmt(periodTotal)}</div>
         </div>
         <div class="stat-card" style="border-left-color:#059669;">
           <div class="text-xs text-gray-500 uppercase tracking-wide mb-1">Year to Date</div>
           <div class="text-xs text-gray-400 mb-1">Jan – ${monthLabel} ${yr}</div>
           <div class="text-lg font-bold text-green-700">${fmt(ytdTotal)}</div>
         </div>
-        <div class="stat-card" style="border-left-color:#B8860B;">
+        <div class="stat-card" style="border-left-color:#d4a800;">
           <div class="text-xs text-gray-500 uppercase tracking-wide mb-1">Active Districts</div>
           <div class="text-xs text-gray-400 mb-1">with income</div>
           <div class="text-lg font-bold text-yellow-700">${districtAccounts.filter(a=>(totals[a.code]?.period||0)>0||(totals[a.code]?.ytd||0)>0).length}</div>
@@ -4533,9 +4533,9 @@ async function loadDistrictIncomeSummary() {
           </thead>
           <tbody>${rows}</tbody>
           <tfoot>
-            <tr style="background:#eff6ff;">
+            <tr style="background:#eef1fb;">
               <td colspan="2" class="font-bold text-gray-800">TOTAL</td>
-              <td class="text-right font-bold font-mono" style="color:#0284c7;">${fmt(periodTotal)}</td>
+              <td class="text-right font-bold font-mono" style="color:#1a3c8f;">${fmt(periodTotal)}</td>
               <td class="text-right font-bold font-mono text-green-700">${fmt(ytdTotal)}</td>
             </tr>
           </tfoot>
@@ -4576,7 +4576,7 @@ function exportDistrictSummaryPDF() {
 
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   // Letterhead
-  doc.setFillColor(2,132,199); doc.rect(0,0,210,22,'F');
+  doc.setFillColor(26,60,143); doc.rect(0,0,210,22,'F');
   doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(15);
   doc.text('Church of Pentecost Canada Inc', 14, 10);
   doc.setFont('helvetica','normal'); doc.setFontSize(11);
@@ -4585,7 +4585,7 @@ function exportDistrictSummaryPDF() {
   doc.text(`Printed: ${new Date().toLocaleString('en-CA')}`, 196, 10, {align:'right'});
 
   // Title block
-  doc.setTextColor(2,132,199); doc.setFont('helvetica','bold'); doc.setFontSize(16);
+  doc.setTextColor(26,60,143); doc.setFont('helvetica','bold'); doc.setFontSize(16);
   doc.text(`District Income — ${monthLabel} ${yr}`, 14, 32);
   doc.setFont('helvetica','normal'); doc.setFontSize(11); doc.setTextColor(80,80,80);
   doc.text(`Current Period: ${periodFrom} to ${periodTo}`, 14, 39);
@@ -4608,7 +4608,7 @@ function exportDistrictSummaryPDF() {
     foot: [['', 'TOTAL', fmt(pTotal), fmt(ytdTotal)]],
     startY: 52,
     theme: 'striped',
-    headStyles: { fillColor:[2,132,199], textColor:[255,255,255], fontStyle:'bold', fontSize:10 },
+    headStyles: { fillColor:[26,60,143], textColor:[255,255,255], fontStyle:'bold', fontSize:10 },
     footStyles: { fillColor:[224,242,254], textColor:[2,84,149], fontStyle:'bold', fontSize:10 },
     bodyStyles: { fontSize:10 },
     columnStyles: { 0:{cellWidth:18}, 2:{halign:'right', cellWidth:36}, 3:{halign:'right', cellWidth:36} },
@@ -4668,7 +4668,7 @@ async function loadImportedRecords() {
       <td><span class="badge-${j.status}">${j.status}</span></td>
       <td>
         <div class="flex gap-2">
-          <button class="text-xs font-semibold hover:underline" style="color:#0284c7;" onclick="editImportedJournal('${j.id}')">Edit</button>
+          <button class="text-xs font-semibold hover:underline" style="color:#1a3c8f;" onclick="editImportedJournal('${j.id}')">Edit</button>
           <button class="text-xs font-semibold text-red-500 hover:underline" onclick="deleteImportedJournal('${j.id}','${j.description.replace(/'/g,'&#39;')}')">Delete</button>
         </div>
       </td>
@@ -4686,7 +4686,7 @@ async function loadImportedRecords() {
       <td><span class="badge-${b.status==='reconciled'?'posted':'draft'}">${b.status}</span></td>
       <td>
         <div class="flex gap-2">
-          <button class="text-xs font-semibold hover:underline" style="color:#0284c7;" onclick="editImportedBankRec('${b.id}')">Edit</button>
+          <button class="text-xs font-semibold hover:underline" style="color:#1a3c8f;" onclick="editImportedBankRec('${b.id}')">Edit</button>
           <button class="text-xs font-semibold text-red-500 hover:underline" onclick="deleteImportedBankRec('${b.id}','${acctLabel}','${b.period_date}')">Delete</button>
         </div>
       </td>
@@ -5046,7 +5046,7 @@ function initDashActivityTab() {
       {code:'5100',label:'Salaries'},
     ];
     chips.innerHTML=common.map(c=>`<button onclick="selectDashAccount('${c.code}','${c.label}')"
-      class="text-xs px-3 py-1 rounded-full border border-gray-300 text-gray-600 hover:bg-[#0284c7] hover:text-white hover:border-[#0284c7] transition-colors"
+      class="text-xs px-3 py-1 rounded-full border border-gray-300 text-gray-600 hover:bg-[#1a3c8f] hover:text-white hover:border-[#1a3c8f] transition-colors"
       >${c.code} — ${c.label}</button>`).join('');
   }
 }
@@ -5191,7 +5191,7 @@ async function runDashAccountActivity() {
       <div class="font-bold text-green-700">${fmt(totalDb)}</div></div>
     <div class="stat-card" style="border-left-color:#6366f1"><div class="text-xs text-gray-500 uppercase tracking-wide mb-1">Total Credits</div>
       <div class="font-bold text-indigo-700">${fmt(totalCr)}</div></div>
-    <div class="stat-card" style="border-left-color:#B8860B"><div class="text-xs text-gray-500 uppercase tracking-wide mb-1">Closing Balance</div>
+    <div class="stat-card" style="border-left-color:#d4a800"><div class="text-xs text-gray-500 uppercase tracking-wide mb-1">Closing Balance</div>
       <div class="font-bold ${bal<0?'text-red-600':'text-gray-800'}">${fmt(Math.abs(bal))} <span class="text-xs">${bal<0?'Cr':'Dr'}</span></div></div>`;
 
   const label=targetCodes.length>1
@@ -5257,7 +5257,7 @@ function exportDashActivityPDF() {
   const {jsPDF}=window.jspdf;
   const doc=new jsPDF({orientation:'landscape',unit:'mm',format:'a4'});
 
-  doc.setFillColor(2,132,199); doc.rect(0,0,297,22,'F');
+  doc.setFillColor(26,60,143); doc.rect(0,0,297,22,'F');
   doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(15);
   doc.text('Church of Pentecost Canada Inc',14,10);
   doc.setFont('helvetica','normal'); doc.setFontSize(11);
@@ -5265,7 +5265,7 @@ function exportDashActivityPDF() {
   doc.setFontSize(10); doc.setTextColor(150,150,150);
   doc.text(`Printed: ${new Date().toLocaleString('en-CA')}`,283,10,{align:'right'});
 
-  doc.setTextColor(2,132,199); doc.setFont('helvetica','bold'); doc.setFontSize(15);
+  doc.setTextColor(26,60,143); doc.setFont('helvetica','bold'); doc.setFontSize(15);
   doc.text(`Account Activity — ${label}`,14,32);
   doc.setFont('helvetica','normal'); doc.setFontSize(11); doc.setTextColor(80,80,80);
   doc.text(`Period: ${from} to ${to}   |   Category: ${primaryAcct?.category||''}`,14,39);
@@ -5290,7 +5290,7 @@ function exportDashActivityPDF() {
     head:[['Date','Ref#','Description','Source','Debit (CAD)','Credit (CAD)','Balance']],
     body:tableBody,
     startY:50,theme:'striped',
-    headStyles:{fillColor:[2,132,199],textColor:[255,255,255],fontStyle:'bold',fontSize:9},
+    headStyles:{fillColor:[26,60,143],textColor:[255,255,255],fontStyle:'bold',fontSize:9},
     bodyStyles:{fontSize:9},
     columnStyles:{0:{cellWidth:20},1:{cellWidth:16},4:{halign:'right',cellWidth:26},5:{halign:'right',cellWidth:26},6:{halign:'right',cellWidth:28}},
     didParseCell(data){
@@ -5440,8 +5440,8 @@ async function loadDashboard() {
       }
       dashChart = new Chart(ctx,{type:'bar',data:{labels:chartLabels,
         datasets:[
-          {label:'Income',data:incData,backgroundColor:'rgba(2,132,199,0.7)',borderColor:'#0284c7',borderWidth:1},
-          {label:'Expense',data:expData,backgroundColor:'rgba(184,134,11,0.5)',borderColor:'#B8860B',borderWidth:1}
+          {label:'Income',data:incData,backgroundColor:'rgba(26,60,143,0.7)',borderColor:'#1a3c8f',borderWidth:1},
+          {label:'Expense',data:expData,backgroundColor:'rgba(184,134,11,0.5)',borderColor:'#d4a800',borderWidth:1}
         ]},
         options:{responsive:true,plugins:{legend:{position:'top'}},scales:{y:{beginAtZero:true,ticks:{callback:v=>'$'+v.toLocaleString('en-CA')}}}}});
     }
