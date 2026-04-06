@@ -3851,6 +3851,211 @@ function removeBankFile() {
   toast('File removed.', 'info');
 }
 
+// ── Scan all rows (up to row 20) to find the real column header row.
+// Power Church files have title rows at top before the actual headers.
+function findHeaderRowIdx(rows) {
+  for (let i = 0; i < Math.min(rows.length, 20); i++) {
+    const lower = (rows[i]||[]).map(c=>(c||'').toString().toLowerCase().trim());
+    // Header row must contain something that looks like an account code column
+    const hasCode = lower.some(c=>
+      c==='acct code'||c==='account code'||c==='account number'||c==='account no'||
+      c==='code'||c==='acct'||c==='acct #'||c==='account #'||c==='acct. code'
+    );
+    if (hasCode) return i;
+    // Also accept: has description/name AND a balance/debit column
+    const hasDesc = lower.some(c=>c==='description'||c==='account name'||c==='account description'||c==='name');
+    const hasBal  = lower.some(c=>c.includes('balance')||c==='debit'||c==='credit');
+    if (hasDesc && hasBal) return i;
+  }
+  return 0; // fallback — use first row
+}
+
+// ── Auto-detect Power Church column positions from a header row ──
+function detectPCColumns(headerRow) {
+  const lower = headerRow.map(c=>(c||'').toString().toLowerCase().trim());
+  const find = (terms) => lower.findIndex(c => terms.some(t => c.includes(t)));
+
+  const codeIdx    = find(['acct code','account code','account no','account number','acct #','account #','acct. code','code','acct']);
+  const nameIdx    = find(['description','account description','account name','acct name','name','title']);
+  const beginIdx   = find(['beg balance','beg bal','beginning balance','beginning bal','beg.','begin']);
+  const periodIdx  = find(['period actual','period act','current period','period']);
+  const currentIdx = find(['curr balance','curr bal','current balance','current bal','ytd balance','ytd bal','ending balance','ending bal','balance']);
+  const debitIdx   = find(['debit','dr ']);
+  const creditIdx  = find(['credit','cr ']);
+
+  return { codeIdx, nameIdx, beginIdx, periodIdx, currentIdx, debitIdx, creditIdx };
+}
+
+// ── After reading rows, try auto-parse. If standard PC format detected go straight
+//    to preview. Otherwise show the column mapper for manual mapping. ──
+function processImportRows(tab, allRows) {
+  if (!allRows || allRows.length < 2) {
+    toast('File appears empty. Make sure it has at least one data row.','error'); return;
+  }
+
+  const hIdx = findHeaderRowIdx(allRows);
+  const headerRow = allRows[hIdx].map(h=>(h||'').toString().trim());
+  const dataRows  = allRows.slice(hIdx+1).filter(r=>r.some(c=>(c||'').toString().trim()!==''));
+
+  if (!dataRows.length) { toast('No data rows found in file.','error'); return; }
+
+  importHeaders[tab] = headerRow;
+  importRawRows[tab] = dataRows;
+
+  const cols = detectPCColumns(headerRow);
+
+  // If we found a code column AND at least one balance/debit column → auto-parse directly
+  const hasPCBal   = cols.currentIdx>=0 || cols.beginIdx>=0 || cols.periodIdx>=0;
+  const hasDCCols  = cols.debitIdx>=0 && cols.creditIdx>=0;
+  const hasCodeCol = cols.codeIdx>=0;
+
+  if (hasCodeCol && (hasPCBal || hasDCCols)) {
+    // Auto-detected — go straight to preview, no manual mapping needed
+    autoPreviewImport(tab, cols, dataRows, hasPCBal && !hasDCCols);
+  } else {
+    // Could not auto-detect — show column mapper
+    showColumnMapper(tab);
+  }
+}
+
+// ── Parse rows directly and show preview without the column mapper ──
+function autoPreviewImport(tab, cols, dataRows, isPCMode) {
+  const parseAmt = v => {
+    let s = String(v||'').replace(/[$\s]/g,'');
+    const neg = s.startsWith('(') || s.startsWith('-');
+    s = s.replace(/[(),\-]/g,'').replace(/,/g,'');
+    const n = parseFloat(s)||0;
+    return neg ? -n : n;
+  };
+
+  const codeCol    = cols.codeIdx;
+  const nameCol    = cols.nameIdx;
+  const currentCol = cols.currentIdx >= 0 ? cols.currentIdx
+                   : cols.periodIdx  >= 0 ? cols.periodIdx
+                   : cols.beginIdx;
+  const beginCol   = cols.beginIdx;
+  const periodCol  = cols.periodIdx;
+  const debitCol   = cols.debitIdx;
+  const creditCol  = cols.creditIdx;
+
+  let totalDb=0, totalCr=0;
+  const parsed=[];
+
+  dataRows.forEach(r => {
+    const code = (r[codeCol]||'').toString().trim();
+    if (!code) return;
+    // Skip rows that look like subtotals/totals/headers (no numeric balance anywhere)
+    const joined = r.join(' ').toLowerCase();
+    if (/^(total|subtotal|net |grand total|assets|liabilities|fund balance|income|expense|revenue)/i.test(joined) && !code.match(/^\d/)) return;
+
+    const name = nameCol>=0 ? (r[nameCol]||'').toString().trim() : '';
+    const acct = coaCache.find(a=>a.code===code);
+
+    if (isPCMode) {
+      // Power Church single-balance mode
+      if (currentCol < 0) return;
+      const currentBal = parseAmt(r[currentCol]);
+      if (!currentBal && !name) return;
+
+      const codeNum = parseInt(code)||0;
+      let normalDC;
+      if (tab==='is') {
+        normalDC = (codeNum>=5000&&codeNum<=5999) ? 'CR' : 'DB';
+      } else {
+        normalDC = acct?.dc;
+        if (!normalDC) {
+          if      (codeNum>=4000&&codeNum<=4999) normalDC='CR';
+          else if (codeNum>=5000&&codeNum<=5999) normalDC='DB';
+          else if (codeNum>=3000&&codeNum<=3999) normalDC='CR';
+          else if (codeNum>=2000&&codeNum<=2999) normalDC='CR';
+          else                                   normalDC='DB';
+        }
+      }
+      let debit=0, credit=0;
+      const absVal = Math.abs(currentBal);
+      if (absVal > 0) {
+        if (normalDC==='DB') { if(currentBal>0) debit=absVal; else credit=absVal; }
+        else                 { if(currentBal>0) credit=absVal; else debit=absVal; }
+      }
+      totalDb+=debit; totalCr+=credit;
+      const beginBal  = beginCol>=0  ? parseAmt(r[beginCol])  : null;
+      const periodBal = periodCol>=0 ? parseAmt(r[periodCol]) : null;
+      const displayName = name || (acct?.name) || '';
+      if (absVal > 0 || displayName) {
+        parsed.push({code, name:displayName, debit, credit, matched:!!acct, beginBal, periodBal, currentBal});
+      }
+    } else {
+      // Debit/Credit mode
+      const debit  = debitCol>=0  ? Math.max(0, parseAmt(r[debitCol]))  : 0;
+      const credit = creditCol>=0 ? Math.max(0, parseAmt(r[creditCol])) : 0;
+      if (!code || (!debit && !credit)) return;
+      totalDb+=debit; totalCr+=credit;
+      const displayName = name || (acct?.name) || '';
+      parsed.push({code, name:displayName, debit, credit, matched:!!acct});
+    }
+  });
+
+  if (!parsed.length) {
+    toast('No account rows found. Opening the manual column mapper…','info');
+    showColumnMapper(tab);
+    return;
+  }
+
+  importRawRows[tab+'_parsed'] = parsed;
+  window['_importParsed_'+tab] = parsed;
+
+  const diff = Math.abs(totalDb-totalCr);
+  const balanced = diff < 0.01;
+  const balanceHtml = balanced
+    ? '<span class="text-green-600 font-semibold">✓ Balanced</span>'
+    : `<span class="text-red-600 font-semibold">⚠ Out of balance by ${fmt(diff)} — you can still post</span>`;
+
+  const hasPCCols = parsed.some(r=>r.beginBal!=null);
+  const rows = parsed.map(r=>`<tr>
+    <td class="font-mono text-xs">${r.code}</td>
+    <td class="text-xs">${r.name}</td>
+    ${hasPCCols?`<td class="text-right text-xs">${r.beginBal!=null?fmt(Math.abs(r.beginBal)):''}</td><td class="text-right text-xs">${r.periodBal!=null?fmt(Math.abs(r.periodBal)):''}</td>`:''}
+    <td class="text-right text-xs font-semibold">${r.debit>0?fmt(r.debit):''}</td>
+    <td class="text-right text-xs font-semibold">${r.credit>0?fmt(r.credit):''}</td>
+    <td class="text-xs">${r.matched?'<span class="text-green-600">✓</span>':'<span class="text-orange-500">New</span>'}</td>
+  </tr>`).join('');
+
+  const bodyHTML=`
+    <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3 text-sm text-blue-800">
+      ✅ <strong>${parsed.length} accounts</strong> auto-detected from Power Church format.
+      <button type="button" onclick="closeModal();showColumnMapper('${tab}')" class="ml-2 text-xs underline text-blue-600">Manual mapping</button>
+    </div>
+    <div class="flex items-center justify-between mb-3">
+      <span class="text-sm font-semibold text-gray-700">${parsed.length} accounts — review before posting</span>
+      <div>${balanceHtml}</div>
+    </div>
+    <div class="overflow-y-auto" style="max-height:340px;">
+      <table class="tbl text-xs w-full">
+        <thead><tr>
+          <th>Code</th><th>Description</th>
+          ${hasPCCols?'<th>Beg Balance</th><th>Period Actual</th>':''}
+          <th>Debit (Opening)</th><th>Credit (Opening)</th><th>COA</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+        <tfoot><tr class="font-bold bg-gray-50 text-xs">
+          <td colspan="${hasPCCols?4:2}">TOTALS</td>
+          <td class="text-right">${fmt(totalDb)}</td>
+          <td class="text-right">${fmt(totalCr)}</td>
+          <td></td>
+        </tr></tfoot>
+      </table>
+    </div>`;
+
+  const footerHTML=`
+    <button type="button" onclick="closeModal()" class="btn-secondary">Cancel</button>
+    <button type="button" onclick="confirmImport('${tab}')" class="btn-primary">Post Opening Balance Journal Entry</button>`;
+
+  openModal(
+    tab==='tb'?'Preview — Opening Balance Import':'Preview — YTD Income Statement Import',
+    bodyHTML, footerHTML
+  );
+}
+
 function parseImportFile(tab) {
   const fileInput=document.getElementById(`imp-${tab}-file`);
   const file=fileInput?.files?.[0];
@@ -3876,18 +4081,13 @@ function parseImportFile(tab) {
           }
           r.push(cur.trim()); return r;
         });
-        if(rows.length<2){toast('File appears empty. Make sure it has a header row and at least one data row.','error');return;}
-        importHeaders[tab]=rows[0].map(h=>h.trim());
-        importRawRows[tab]=rows.slice(1).filter(r=>r.some(c=>c.toString().trim()!==''));
-        if(!importRawRows[tab].length){toast('No data rows found after the header row.','error');return;}
-        showColumnMapper(tab);
+        processImportRows(tab, rows);
       } catch(err){ toast('CSV parse error: '+err.message,'error'); }
     };
     reader.readAsText(file);
   } else {
-    // Excel — read as binary string which works more reliably across browsers
     if(typeof XLSX==='undefined'){
-      toast('Excel library not loaded. Please refresh the page and try again, or save the file as CSV.','error');
+      toast('Excel library not loaded. Please refresh the page and try again, or save as CSV.','error');
       return;
     }
     const reader=new FileReader();
@@ -3899,11 +4099,7 @@ function parseImportFile(tab) {
         const ws=wb.Sheets[wb.SheetNames[0]];
         const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:'',raw:false})
           .map(r=>Array.isArray(r)?r.map(c=>String(c??'').trim()):[]);
-        if(rows.length<2){toast('Excel file appears empty. Make sure it has a header row and at least one data row.','error');return;}
-        importHeaders[tab]=rows[0].map(h=>h.trim());
-        importRawRows[tab]=rows.slice(1).filter(r=>r.some(c=>c.toString().trim()!==''));
-        if(!importRawRows[tab].length){toast('No data rows found after the header row.','error');return;}
-        showColumnMapper(tab);
+        processImportRows(tab, rows);
       } catch(err){ toast('Excel read error: '+err.message,'error'); console.error('Excel error:',err); }
     };
     reader.readAsBinaryString(file);
@@ -4015,7 +4211,8 @@ function extractAccountingRows(textRows, tab) {
 
     const code=cols[codeIdx];
     const acct=coaCache.find(a=>a.code===code);
-    parsed.push({code, name: name||(acct?acct.name:''), debit, credit, matched:!!acct});
+    // Prefer the name from the file; only fall back to COA if file gave nothing
+    parsed.push({code, name: name||acct?.name||'', debit, credit, matched:!!acct});
   });
   return parsed;
 }
@@ -4128,14 +4325,14 @@ async function parseBankStatementFile() {
 function showColumnMapper(tab) {
   const headers=importHeaders[tab]||[];
   const mid = tab==='tb'?'mtb':'mis';
-  const find=(terms)=>{const i=headers.findIndex(h=>terms.some(t=>h.toLowerCase().includes(t)));return i>=0?i:-1;};
-  const codeIdx   =find(['code','account code','acct','acc #','acct #']);
-  const nameIdx   =find(['name','description','account name','account title','desc']);
-  const beginIdx  =find(['begin','opening','beg bal','beginning']);
-  const periodIdx =find(['period','actual','period actual','current period']);
-  const currentIdx=find(['current','ending','ytd','current bal','end bal','balance']);
-  const debitIdx  =find(['debit','dr']);
-  const creditIdx =find(['credit','cr']);
+  const cols=detectPCColumns(headers);
+  const codeIdx   =cols.codeIdx;
+  const nameIdx   =cols.nameIdx;
+  const beginIdx  =cols.beginIdx;
+  const periodIdx =cols.periodIdx;
+  const currentIdx=cols.currentIdx;
+  const debitIdx  =cols.debitIdx;
+  const creditIdx =cols.creditIdx;
 
   const hasSingleBal = beginIdx>=0||periodIdx>=0||currentIdx>=0;
   const hasDebitCredit = debitIdx>=0&&creditIdx>=0;
