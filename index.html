@@ -3953,94 +3953,90 @@ function openImportStep1Modal(tab, allRows) {
   // Find header row
   const hIdx = findHeaderRowIdx(allRows);
   const headerRow = allRows[hIdx].map(h=>(h||'').toString().trim());
-  const dataRows  = allRows.slice(hIdx+1).filter(r=>r.some(c=>(c||'').toString().trim()!==''));
 
-  // Show first 20 rows (including up to 5 title rows before header)
-  const previewStart = Math.max(0, hIdx-4);
-  const previewRows  = allRows.slice(previewStart, hIdx+16);
+  // Show up to 5 title rows before header + 15 data rows
+  const previewStart = Math.max(0, hIdx - 4);
+  const previewRows  = allRows.slice(previewStart, hIdx + 16);
 
-  const colCount = Math.max(...allRows.slice(0, hIdx+5).map(r=>r.length));
+  // ── Build raw table safely (no nested template literals — avoids breakage on special chars) ──
+  function esc(v) {
+    return String(v==null?'':v)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;');
+  }
+  let tbodyHtml = '';
+  previewRows.forEach(function(r, ri) {
+    const isHeader = (ri === hIdx - previewStart);
+    const style = isHeader
+      ? 'background:#1a3c8f;color:white;font-weight:bold;'
+      : (ri < (hIdx - previewStart) ? 'color:#aaa;font-style:italic;' : '');
+    let tds = '';
+    (r||[]).forEach(function(c) { tds += '<td class="px-2 py-1 border-r border-gray-100 whitespace-nowrap">' + esc(c) + '</td>'; });
+    if (isHeader) tds += '<td class="px-2 py-1 whitespace-nowrap" style="color:#FFD700;">&#8592; header</td>';
+    tbodyHtml += '<tr style="' + style + '">' + tds + '</tr>';
+  });
 
-  // Build raw table
-  const rawTable = `
-    <div class="overflow-x-auto rounded border border-gray-200 mb-4" style="max-height:220px;overflow-y:auto;">
-      <table class="text-xs w-full">
-        <tbody>
-          ${previewRows.map((r,ri)=>{
-            const isHeader = (ri === hIdx - previewStart);
-            const bg = isHeader ? 'background:#1a3c8f;color:white;' : (ri<(hIdx-previewStart)?'color:#999;font-style:italic;':'');
-            const label = isHeader ? ' ← detected header' : '';
-            return `<tr style="${bg}">
-              ${r.map(c=>`<td class="px-2 py-1 border-r border-gray-100 whitespace-nowrap">${c||''}</td>`).join('')}
-              ${isHeader?`<td class="px-2 py-1 text-yellow-300 font-bold whitespace-nowrap">${label}</td>`:''}
-            </tr>`;
-          }).join('')}
-        </tbody>
-      </table>
-    </div>
-    <div class="text-xs text-gray-400 mb-4">Rows in grey = title rows (skipped). Blue row = detected header. Rows below = data.</div>`;
+  const rawTable =
+    '<div class="overflow-x-auto rounded border border-gray-200 mb-3" style="max-height:200px;overflow-y:auto;">' +
+    '<table class="text-xs w-full"><tbody>' + tbodyHtml + '</tbody></table></div>' +
+    '<p class="text-xs text-gray-400 mb-4">Grey/italic = title rows (skipped). Blue = detected header row. White = data rows.</p>';
 
   // Auto-detect columns
   const cols = detectPCColumns(headerRow);
   if (isIS) {
-    if (cols.ytdIdx >= 0)        cols.currentIdx = cols.ytdIdx;
-    else if (cols.mtdIdx >= 0)   cols.currentIdx = cols.mtdIdx;
-    else if (cols.currentIdx>=0) cols.currentIdx = cols.currentIdx;
+    if      (cols.ytdIdx   >= 0) cols.currentIdx = cols.ytdIdx;
+    else if (cols.mtdIdx   >= 0) cols.currentIdx = cols.mtdIdx;
   }
 
+  // Build dropdown options safely
   const noneOpt = '<option value="-1">— not in file —</option>';
-  const opts = headerRow.map((h,i)=>`<option value="${i}">${i}: ${h||'(col '+(i+1)+')'}</option>`).join('');
-  const setV = (idx, fallback=-1) => idx>=0 ? idx : fallback;
+  let opts = '';
+  headerRow.forEach(function(h, i) {
+    opts += '<option value="' + i + '">' + i + ': ' + esc(h || '(col ' + (i+1) + ')') + '</option>';
+  });
 
-  // For IS: show YTD / MTD selector; for TB: show balance / debit / credit
-  const amtFields = isIS ? `
-    <div>
-      <label class="form-label">Year to Date column * <span class="font-normal text-gray-400">(recommended)</span></label>
-      <select id="imp-col-ytd" class="form-input text-xs">${noneOpt}${opts}</select>
-    </div>
-    <div>
-      <label class="form-label">Month to Date column <span class="font-normal text-gray-400">(optional)</span></label>
-      <select id="imp-col-mtd" class="form-input text-xs">${noneOpt}${opts}</select>
-    </div>` : `
-    <div>
-      <label class="form-label">Balance column * <span class="font-normal text-gray-400">(or use Debit/Credit below)</span></label>
-      <select id="imp-col-bal" class="form-input text-xs">${noneOpt}${opts}</select>
-    </div>
-    <div>
-      <label class="form-label">Debit column <span class="font-normal text-gray-400">(if separate columns)</span></label>
-      <select id="imp-col-debit" class="form-input text-xs">${noneOpt}${opts}</select>
-    </div>
-    <div>
-      <label class="form-label">Credit column <span class="font-normal text-gray-400">(if separate columns)</span></label>
-      <select id="imp-col-credit" class="form-input text-xs">${noneOpt}${opts}</select>
-    </div>`;
+  const setV = function(idx, fallback) { return (idx == null || idx < 0) ? (fallback == null ? -1 : fallback) : idx; };
 
-  const bodyHTML = `
-    <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3 text-xs text-blue-800">
-      <strong>Step 1 of 2 — Verify your file.</strong> The table below shows your file as read.
-      Confirm the columns below match what you see. Descriptions will be taken <em>exactly</em> from your file.
-    </div>
-    ${rawTable}
-    <div class="grid grid-cols-2 gap-3">
-      <div>
-        <label class="form-label">Account Code column *</label>
-        <select id="imp-col-code" class="form-input text-xs">${opts}</select>
-      </div>
-      <div>
-        <label class="form-label">Description column *</label>
-        <select id="imp-col-desc" class="form-input text-xs">${noneOpt}${opts}</select>
-      </div>
-      ${amtFields}
-    </div>`;
+  // Amount fields differ for IS vs TB
+  let amtFields = '';
+  if (isIS) {
+    amtFields =
+      '<div><label class="form-label">Year to Date column *</label>' +
+      '<select id="imp-col-ytd" class="form-input text-xs">' + noneOpt + opts + '</select></div>' +
+      '<div><label class="form-label">Month to Date column <span class="font-normal text-gray-400">(optional)</span></label>' +
+      '<select id="imp-col-mtd" class="form-input text-xs">' + noneOpt + opts + '</select></div>';
+  } else {
+    amtFields =
+      '<div><label class="form-label">Balance column * <span class="font-normal text-gray-400">(single amount column)</span></label>' +
+      '<select id="imp-col-bal" class="form-input text-xs">' + noneOpt + opts + '</select></div>' +
+      '<div><label class="form-label">Debit column <span class="font-normal text-gray-400">(if file has separate debit/credit)</span></label>' +
+      '<select id="imp-col-debit" class="form-input text-xs">' + noneOpt + opts + '</select></div>' +
+      '<div><label class="form-label">Credit column <span class="font-normal text-gray-400">(if file has separate debit/credit)</span></label>' +
+      '<select id="imp-col-credit" class="form-input text-xs">' + noneOpt + opts + '</select></div>';
+  }
 
-  const footerHTML = `
-    <button type="button" onclick="closeModal()" class="btn-secondary">Cancel</button>
-    <button type="button" onclick="runImportPreview('${tab}')" class="btn-primary">Preview Import →</button>`;
+  const bodyHTML =
+    '<div class="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3 text-xs text-blue-800">' +
+    '<strong>Step 1 of 2 — Verify your file.</strong> The table below shows your file exactly as read. ' +
+    'Confirm the column dropdowns match your file columns. Descriptions will be copied exactly from your file.' +
+    '</div>' +
+    rawTable +
+    '<div class="grid grid-cols-2 gap-3">' +
+    '<div><label class="form-label">Account Code column *</label>' +
+    '<select id="imp-col-code" class="form-input text-xs">' + opts + '</select></div>' +
+    '<div><label class="form-label">Description / Account Name column *</label>' +
+    '<select id="imp-col-desc" class="form-input text-xs">' + noneOpt + opts + '</select></div>' +
+    amtFields +
+    '</div>';
 
-  openModal(`Import ${reportName} — Step 1: Verify File`, bodyHTML, footerHTML);
+  const footerHTML =
+    '<button type="button" onclick="closeModal()" class="btn-secondary">Cancel</button>' +
+    '<button type="button" onclick="runImportPreview(\'' + tab + '\')" class="btn-primary">Preview Import \u2192</button>';
 
-  // Set auto-detected values
-  const s = (id, val) => { const el=document.getElementById(id); if(el&&val>=0) el.value=String(val); };
+  openModal('Import ' + reportName + ' \u2014 Step 1: Verify Columns', bodyHTML, footerHTML);
+
+  // Set auto-detected values after modal renders
+  const s = function(id, val) { const el = document.getElementById(id); if (el && val >= 0) el.value = String(val); };
   s('imp-col-code', setV(cols.codeIdx, 0));
   s('imp-col-desc', setV(cols.nameIdx));
   if (isIS) {
