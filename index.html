@@ -3954,8 +3954,10 @@ function processImportRows(tab, allRows) {
   const hasCodeCol = cols.codeIdx>=0;
 
   if (hasCodeCol && (hasPCBal || hasDCCols)) {
-    // Auto-detected — go straight to preview, no manual mapping needed
-    autoPreviewImport(tab, cols, dataRows, hasPCBal && !hasDCCols);
+    // For IS tab: always use PC single-amount mode — income/expense side is determined
+    // by account code range (4xxx=income/DB, 5xxx=expense/CR), never by debit/credit columns.
+    const isPCMode = (tab === 'is') ? true : (hasPCBal && !hasDCCols);
+    autoPreviewImport(tab, cols, dataRows, isPCMode);
   } else {
     // Could not auto-detect — show column mapper
     showColumnMapper(tab);
@@ -4056,12 +4058,14 @@ function autoPreviewImport(tab, cols, dataRows, isPCMode) {
       });
 
     } else {
-      // Debit/Credit mode
+      // Debit/Credit column mode (TB only — IS always uses PC mode above)
       const debit  = debitCol>=0  ? Math.max(0, parseAmt(r[debitCol]))  : 0;
       const credit = creditCol>=0 ? Math.max(0, parseAmt(r[creditCol])) : 0;
       if (!debit && !credit) return;
       totalDb+=debit; totalCr+=credit;
-      parsed.push({code, name:displayName, debit, credit, matched:!!acct});
+      parsed.push({code, name:displayName, debit, credit, matched:!!acct,
+        isIncome: codeNum>=4000&&codeNum<=4999,
+        isExpense: codeNum>=5000&&codeNum<=5999});
     }
   });
 
