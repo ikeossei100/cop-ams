@@ -5630,15 +5630,14 @@ async function loadDashboard() {
     // Stat card totals (use stat-range data)
     const balStat = buildAccountBalances(jnlStat, conStat);
     let totalIncome=0, totalExpense=0;
-    // Use absolute net balance so both IS-import entries (income=DB, expense=CR)
-    // and regular journal entries (income=CR, expense=DB) are counted correctly.
-    coaCache.filter(a=>a.type==='Detail'&&a.category==='Income'&&balStat[a.code]).forEach(a=>{
-      const b=balStat[a.code];
-      totalIncome+=Math.abs(b.credit-b.debit);
-    });
-    coaCache.filter(a=>a.type==='Detail'&&a.category==='Expense'&&balStat[a.code]).forEach(a=>{
-      const b=balStat[a.code];
-      totalExpense+=Math.abs(b.debit-b.credit);
+    // Sum by account code range so accounts not yet in COA (imported but unmatched)
+    // are still counted. Also use Math.abs(net) to handle both IS-import direction
+    // (income=DB, expense=CR) and normal direction (income=CR, expense=DB).
+    Object.keys(balStat).forEach(code => {
+      const codeNum = parseInt(code) || 0;
+      const b = balStat[code];
+      if (codeNum >= 4000 && codeNum <= 4999) totalIncome  += Math.max(b.debit, b.credit);
+      if (codeNum >= 5000 && codeNum <= 5999) totalExpense += Math.max(b.debit, b.credit);
     });
     const contrib_total = conStat.reduce((s,c)=>s+(parseFloat(c.amount)||0),0);
     const netSurplus = totalIncome - totalExpense;
@@ -5669,11 +5668,10 @@ async function loadDashboard() {
           const d = new Date(j.date).getDate()-1;
           if(d<0||d>=lastDayOfNavM) return;
           (j.lines||[]).forEach(l=>{
-            const a=coaCache.find(x=>x.code===l.account_code);
+            const codeNum=parseInt(l.account_code)||0;
             const amt=parseFloat(l.amount)||0;
-            // Accept both directions: IS import (income=DB, expense=CR) and normal (income=CR, expense=DB)
-            if(a?.category==='Income')  incData[d]+=amt;
-            if(a?.category==='Expense') expData[d]+=amt;
+            if(codeNum>=4000&&codeNum<=4999) incData[d]+=amt;
+            if(codeNum>=5000&&codeNum<=5999) expData[d]+=amt;
           });
         });
         conStat.forEach(c=>{
@@ -5690,11 +5688,10 @@ async function loadDashboard() {
           const mIdx = new Date(j.date).getMonth();
           if(mIdx>=numMonths) return;
           (j.lines||[]).forEach(l=>{
-            const a=coaCache.find(x=>x.code===l.account_code);
+            const codeNum=parseInt(l.account_code)||0;
             const amt=parseFloat(l.amount)||0;
-            // Accept both directions: IS import (income=DB, expense=CR) and normal (income=CR, expense=DB)
-            if(a?.category==='Income')  incData[mIdx]+=amt;
-            if(a?.category==='Expense') expData[mIdx]+=amt;
+            if(codeNum>=4000&&codeNum<=4999) incData[mIdx]+=amt;
+            if(codeNum>=5000&&codeNum<=5999) expData[mIdx]+=amt;
           });
         });
         con.forEach(c=>{
