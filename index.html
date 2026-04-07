@@ -4731,19 +4731,12 @@ async function confirmImport(tab) {
   if(!date){toast('Please set the as-of date.','error');return;}
 
   const lines=parsed.map(r=>{
-    const amt=Math.abs(r.debit||0)+Math.abs(r.credit||0);
-    if(!amt) return [];
-    if(tab==='is'){
-      // IS: Income (4xxx) → DB, Expense (5xxx) → CR  (confirmed user convention)
-      const codeNum=parseInt(r.code)||0;
-      const dc=(codeNum>=5000&&codeNum<=5999)?'CR':'DB';
-      return [{account_code:r.code, dc, amount:amt, description:r.name}];
-    } else {
-      const entries=[];
-      if(r.debit>0)  entries.push({account_code:r.code,dc:'DB',amount:r.debit, description:r.name});
-      if(r.credit>0) entries.push({account_code:r.code,dc:'CR',amount:r.credit,description:r.name});
-      return entries;
-    }
+    // Use the debit/credit values already computed correctly during parsing.
+    // For IS: income rows have debit>0, expense rows have credit>0 (set in autoPreviewImport).
+    const entries=[];
+    if((r.debit||0)>0.005)  entries.push({account_code:r.code, dc:'DB', amount:Math.round((r.debit||0)*100)/100,  description:r.name});
+    if((r.credit||0)>0.005) entries.push({account_code:r.code, dc:'CR', amount:Math.round((r.credit||0)*100)/100, description:r.name});
+    return entries;
   }).flat();
 
   // ── For IS import: add a balancing Net Income line to Fund Balance (3000) ──
