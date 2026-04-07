@@ -1593,27 +1593,122 @@ async function saveNewAccount() {
 }
 
 function openEditAccount(a) {
+  const parentOpts = coaCache.filter(x=>x.type==='Group'&&x.code!==a.code)
+    .map(x=>`<option value="${x.code}" ${a.parent_code===x.code?'selected':''}>${x.code} – ${x.name}</option>`).join('');
   openModal('Edit Account', `<div class="space-y-3">
-    <div><label class="form-label">Code</label><input class="form-input bg-gray-50" value="${a.code}" disabled></div>
-    <div><label class="form-label">Name *</label><input id="m-name" class="form-input" value="${a.name}"></div>
     <div class="grid grid-cols-2 gap-3">
-      <div><label class="form-label">Category</label><select id="m-cat" class="form-input">${['Asset','Liability','Fund Balance','Income','Expense'].map(c=>`<option ${a.category===c?'selected':''}>${c}</option>`).join('')}</select></div>
-      <div><label class="form-label">D/C</label><select id="m-dc" class="form-input"><option ${a.dc==='DB'?'selected':''}>DB</option><option ${a.dc==='CR'?'selected':''}>CR</option></select></div>
+      <div>
+        <label class="form-label">Code *</label>
+        <input id="m-newcode" class="form-input font-mono" value="${a.code}" placeholder="e.g. 4101">
+        <p class="text-xs text-orange-600 mt-1">⚠ Changing the code will update all journal entries and contributions that reference this account.</p>
+      </div>
+      <div><label class="form-label">Level</label>
+        <select id="m-level" class="form-input">
+          <option value="1" ${a.level==1?'selected':''}>1 – Top Group</option>
+          <option value="2" ${a.level==2?'selected':''}>2 – Sub Group</option>
+          <option value="3" ${a.level==3?'selected':''}>3 – Sub-Sub Group</option>
+          <option value="4" ${a.level==4?'selected':''}>4 – Detail</option>
+        </select>
+      </div>
+    </div>
+    <div><label class="form-label">Name *</label><input id="m-name" class="form-input" value="${a.name.replace(/"/g,'&quot;')}"></div>
+    <div class="grid grid-cols-2 gap-3">
+      <div><label class="form-label">Parent Account</label>
+        <select id="m-parent" class="form-input"><option value="">None</option>${parentOpts}</select>
+      </div>
+      <div><label class="form-label">Type</label>
+        <select id="m-type" class="form-input">
+          <option value="Detail" ${a.type==='Detail'?'selected':''}>Detail</option>
+          <option value="Group"  ${a.type==='Group'?'selected':''}>Group</option>
+        </select>
+      </div>
+    </div>
+    <div class="grid grid-cols-3 gap-3">
+      <div><label class="form-label">Category</label>
+        <select id="m-cat" class="form-input">${['Asset','Liability','Fund Balance','Income','Expense'].map(c=>`<option ${a.category===c?'selected':''}>${c}</option>`).join('')}</select>
+      </div>
+      <div><label class="form-label">D/C</label>
+        <select id="m-dc" class="form-input"><option ${a.dc==='DB'?'selected':''}>DB</option><option ${a.dc==='CR'?'selected':''}>CR</option></select>
+      </div>
+      <div><label class="form-label">Sort Order</label>
+        <input id="m-sort" type="number" class="form-input" value="${a.sort_order||0}">
+      </div>
     </div>
   </div>`,
-  `<button class="btn-secondary" onclick="closeModal()">Cancel</button><button class="btn-primary" onclick="saveEditAccount('${a.code}')">Save</button>`);
+  `<button class="btn-secondary" onclick="closeModal()">Cancel</button><button class="btn-primary" onclick="saveEditAccount('${a.code}')">Save Changes</button>`);
 }
 
-async function saveEditAccount(code) {
-  const name=document.getElementById('m-name').value.trim();
-  if (!name) { toast('Name required.','error'); return; }
-  const updates={name,category:document.getElementById('m-cat').value,dc:document.getElementById('m-dc').value};
-  const {error}=await sb.from('coa').update(updates).eq('code',code);
-  if (error) { toast('Error: '+error.message,'error'); return; }
-  const idx=coaCache.findIndex(a=>a.code===code);
-  if (idx>=0) Object.assign(coaCache[idx],updates);
-  await logAction('UPDATE','coa',code,null,updates);
-  closeModal(); renderCOA(); toast('Account updated.','success');
+async function saveEditAccount(oldCode) {
+  const newCode = (document.getElementById('m-newcode').value||'').trim();
+  const name    = (document.getElementById('m-name').value||'').trim();
+  if (!newCode||!name) { toast('Code and Name are required.','error'); return; }
+
+  const updates = {
+    name,
+    category:    document.getElementById('m-cat').value,
+    dc:          document.getElementById('m-dc').value,
+    type:        document.getElementById('m-type').value,
+    level:       parseInt(document.getElementById('m-level').value)||4,
+    parent_code: document.getElementById('m-parent').value||null,
+    sort_order:  parseInt(document.getElementById('m-sort').value)||0,
+  };
+
+  const codeChanged = newCode !== oldCode;
+
+  if (codeChanged) {
+    // Validate new code is free
+    if (coaCache.find(a=>a.code===newCode)) { toast('Code ' + newCode + ' already exists.','error'); return; }
+
+    // 1. Insert new COA row
+    const oldAcct = coaCache.find(a=>a.code===oldCode);
+    const newAcct = Object.assign({}, oldAcct, updates, {code: newCode});
+    const {error: insErr} = await sb.from('coa').insert(newAcct);
+    if (insErr) { toast('Error creating new code: '+insErr.message,'error'); return; }
+
+    // 2. Update parent_code references in other COA rows
+    await sb.from('coa').update({parent_code: newCode}).eq('parent_code', oldCode);
+
+    // 3. Update contributions
+    await sb.from('contributions').update({account_code: newCode}).eq('account_code', oldCode);
+
+    // 4. Update journal lines (JSONB array — must fetch, patch, re-save)
+    const {data: jnls} = await sb.from('journals').select('id,lines').filter('lines', 'cs', JSON.stringify([{account_code: oldCode}]));
+    if (jnls && jnls.length) {
+      // cs filter may be broad; patch each journal that truly contains the old code
+      for (const j of jnls) {
+        const lines = (j.lines||[]).map(l => l.account_code===oldCode ? {...l, account_code: newCode} : l);
+        await sb.from('journals').update({lines}).eq('id', j.id);
+      }
+    }
+    // Fallback: broader search — fetch all journals and patch any that reference old code
+    // (Supabase JSONB 'cs' filter on arrays of objects can miss some rows)
+    const {data: allJnls} = await sb.from('journals').select('id,lines');
+    if (allJnls) {
+      const toFix = allJnls.filter(j=>(j.lines||[]).some(l=>l.account_code===oldCode));
+      for (const j of toFix) {
+        const lines = (j.lines||[]).map(l => l.account_code===oldCode ? {...l, account_code: newCode} : l);
+        await sb.from('journals').update({lines}).eq('id', j.id);
+      }
+    }
+
+    // 5. Delete old COA row
+    await sb.from('coa').delete().eq('code', oldCode);
+
+    // Update local cache
+    const idx = coaCache.findIndex(a=>a.code===oldCode);
+    if (idx>=0) { coaCache[idx] = newAcct; } else { coaCache.push(newAcct); }
+    coaCache.forEach(a=>{ if(a.parent_code===oldCode) a.parent_code=newCode; });
+    await logAction('UPDATE','coa',oldCode,{code:oldCode},{code:newCode,...updates});
+    closeModal(); renderCOA(); toast('Account code changed from ' + oldCode + ' to ' + newCode + ' — all references updated.','success');
+  } else {
+    // Code unchanged — simple update
+    const {error} = await sb.from('coa').update(updates).eq('code', oldCode);
+    if (error) { toast('Error: '+error.message,'error'); return; }
+    const idx = coaCache.findIndex(a=>a.code===oldCode);
+    if (idx>=0) Object.assign(coaCache[idx], updates);
+    await logAction('UPDATE','coa',oldCode,null,updates);
+    closeModal(); renderCOA(); toast('Account updated.','success');
+  }
 }
 
 async function toggleAccountActive(code,newState) {
