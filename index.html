@@ -3997,9 +3997,9 @@ function openImportStep1Modal(tab, allRows) {
   const hIdx = findHeaderRowIdx(allRows);
   const headerRow = allRows[hIdx].map(h=>(h||'').toString().trim());
 
-  // Show up to 5 title rows before header + 15 data rows
+  // Show title rows before header + ALL data rows
   const previewStart = Math.max(0, hIdx - 4);
-  const previewRows  = allRows.slice(previewStart, hIdx + 16);
+  const previewRows  = allRows.slice(previewStart);
 
   // ── Build raw table safely (no nested template literals — avoids breakage on special chars) ──
   function esc(v) {
@@ -4144,7 +4144,7 @@ function runImportPreview(tab) {
       const ytdAmt = parseAmt(r[ytdCol>=0?ytdCol:amtCol]);
       const mtdAmt = mtdCol>=0 ? parseAmt(r[mtdCol]) : null;
       const absAmt = Math.abs(ytdAmt||parseAmt(r[amtCol]));
-      if (!absAmt) return;
+      // Include zero-amount rows — don't skip them (they're valid accounts with $0 balance)
       const codeNum = parseInt(code)||0;
       const acct = coaCache.find(a=>a.code===code);
       // Income (4xxx) → Debit | Expense (5xxx) → Credit
@@ -4181,7 +4181,7 @@ function runImportPreview(tab) {
         // Single balance column — assign side by account code range
         const rawBal = parseAmt(r[balCol]);
         const absAmt = Math.abs(rawBal);
-        if (!absAmt) return;
+        // Include zero-balance accounts in preview (don't skip them)
         let dc = acct?.dc;
         if (!dc) {
           if      (codeNum>=1000&&codeNum<=1999) dc='DB'; // Assets → Debit
@@ -4194,7 +4194,7 @@ function runImportPreview(tab) {
         if (dc==='DB') { if(rawBal>=0) debit=absAmt; else credit=absAmt; }
         else           { if(rawBal>=0) credit=absAmt; else debit=absAmt; }
       }
-      if (!debit && !credit) return;
+      // Keep row even if both are zero — valid account with $0 balance
       totalDb+=debit; totalCr+=credit;
       parsed.push({code, name:desc||(acct?.name||''), debit, credit, matched:!!acct});
     });
