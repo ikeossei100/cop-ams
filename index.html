@@ -946,7 +946,7 @@ tailwind.config = {
       <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 text-xs text-blue-800">
         <strong>Power Church — Income &amp; Expense Statement by Fund:</strong> In Power Church go to <em>Accounting → Reports → Income &amp; Expense Statement</em>, export to Excel or CSV.<br>
         The file will have columns like: <em>Acct Code | Description | Month to Date | Year to Date | Budget | Difference</em>.<br>
-        <strong>Income (4xxx) → Debit &nbsp;|&nbsp; Expenses (5xxx) → Credit &nbsp;|&nbsp; Net = Excess Income over Expense → Fund Balance (3000)</strong><br>
+        <strong>Income (4xxx) → Debit &nbsp;|&nbsp; Expenses (5xxx) → Credit &nbsp;|&nbsp; Net = Excess Income over Expense → Fund Balance (3001)</strong><br>
         Section labels (INCOME, EXPENSES) and total rows ("Total Income", "Total Expenses", "Excess Income over Expense") are automatically skipped.<br>
         After uploading you will see the raw file rows and confirm columns — the <em>Year to Date</em> column is used as the import amount.
         <br><br>
@@ -4301,23 +4301,37 @@ async function confirmImport(tab) {
     return entries;
   }).flat();
 
-  // ── For IS import: add a balancing Net Income line to Fund Balance (3000) ──
+  // ── For IS import: add a balancing Net Income line to Fund Balance (3001) ──
   // Income lines are DB, Expense lines are CR.
   // Net Income = Total Income DB − Total Expense CR
-  // To balance the journal: if surplus → CR to Fund Balance 3000; if deficit → DB to Fund Balance 3000
+  // To balance the journal: if surplus → CR to Fund Balance 3001; if deficit → DB to Fund Balance 3001
   if(tab==='is'){
     const totalIncomeDB = lines.filter(l=>l.dc==='DB').reduce((s,l)=>s+l.amount,0);
     const totalExpCR    = lines.filter(l=>l.dc==='CR').reduce((s,l)=>s+l.amount,0);
     const net = totalIncomeDB - totalExpCR;
     if(Math.abs(net)>0.005){
-      const fundAcct = coaCache.find(a=>a.code==='3000')||{code:'3000'};
       // Surplus (income > expense): DB side is higher → add CR to balance
       // Deficit  (expense > income): CR side is higher → add DB to balance
       lines.push({
-        account_code:'3000',
+        account_code:'3001',
         dc: net>0?'CR':'DB',
         amount:Math.abs(net),
         description:'Excess Income over Expense (Net)'
+      });
+    }
+  }
+  // ── For TB (Balance Sheet) import: balance any difference to Fund Balance (3001) ──
+  if(tab==='tb'){
+    const totalDbTB = lines.filter(l=>l.dc==='DB').reduce((s,l)=>s+l.amount,0);
+    const totalCrTB = lines.filter(l=>l.dc==='CR').reduce((s,l)=>s+l.amount,0);
+    const diff = totalDbTB - totalCrTB;
+    if(Math.abs(diff)>0.005){
+      // More debits than credits → add CR to 3001 to balance; and vice versa
+      lines.push({
+        account_code:'3001',
+        dc: diff>0?'CR':'DB',
+        amount:Math.abs(diff),
+        description:'Fund Balance (Opening)'
       });
     }
   }
