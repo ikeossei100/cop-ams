@@ -5630,12 +5630,29 @@ async function loadDashboard() {
     // Stat card totals (use stat-range data)
     const balStat = buildAccountBalances(jnlStat, conStat);
     let totalIncome=0, totalExpense=0;
-    coaCache.filter(a=>a.type==='Detail'&&a.category==='Income'&&balStat[a.code]).forEach(a=>{ totalIncome+=(balStat[a.code].credit-balStat[a.code].debit); });
-    coaCache.filter(a=>a.type==='Detail'&&a.category==='Expense'&&balStat[a.code]).forEach(a=>{ totalExpense+=(balStat[a.code].debit-balStat[a.code].credit); });
+    // Use absolute net balance so both IS-import entries (income=DB, expense=CR)
+    // and regular journal entries (income=CR, expense=DB) are counted correctly.
+    coaCache.filter(a=>a.type==='Detail'&&a.category==='Income'&&balStat[a.code]).forEach(a=>{
+      const b=balStat[a.code];
+      totalIncome+=Math.abs(b.credit-b.debit);
+    });
+    coaCache.filter(a=>a.type==='Detail'&&a.category==='Expense'&&balStat[a.code]).forEach(a=>{
+      const b=balStat[a.code];
+      totalExpense+=Math.abs(b.debit-b.credit);
+    });
     const contrib_total = conStat.reduce((s,c)=>s+(parseFloat(c.amount)||0),0);
+    const netSurplus = totalIncome - totalExpense;
     document.getElementById('dash-income').textContent = fmt(totalIncome);
     document.getElementById('dash-expense').textContent = fmt(totalExpense);
-    document.getElementById('dash-net').textContent = fmt(totalIncome-totalExpense);
+    const netEl = document.getElementById('dash-net');
+    if (netEl) {
+      netEl.textContent = fmt(Math.abs(netSurplus));
+      netEl.style.color = netSurplus >= 0 ? '#16a34a' : '#dc2626';
+    }
+    const netLabelEl = document.querySelector('[id="dash-net"]')?.closest('.stat-card')?.querySelector('.text-xs');
+    if (netLabelEl) netLabelEl.textContent = netSurplus >= 0 ? 'Surplus' : 'Deficit';
+    const netCard = document.getElementById('dash-net')?.closest('.stat-card');
+    if (netCard) netCard.style.borderLeftColor = netSurplus >= 0 ? '#16a34a' : '#dc2626';
     document.getElementById('dash-contrib').textContent = fmt(contrib_total);
 
     // Build chart data
@@ -5654,8 +5671,9 @@ async function loadDashboard() {
           (j.lines||[]).forEach(l=>{
             const a=coaCache.find(x=>x.code===l.account_code);
             const amt=parseFloat(l.amount)||0;
-            if(a?.category==='Income'&&l.dc==='CR') incData[d]+=amt;
-            if(a?.category==='Expense'&&l.dc==='DB') expData[d]+=amt;
+            // Accept both directions: IS import (income=DB, expense=CR) and normal (income=CR, expense=DB)
+            if(a?.category==='Income')  incData[d]+=amt;
+            if(a?.category==='Expense') expData[d]+=amt;
           });
         });
         conStat.forEach(c=>{
@@ -5674,8 +5692,9 @@ async function loadDashboard() {
           (j.lines||[]).forEach(l=>{
             const a=coaCache.find(x=>x.code===l.account_code);
             const amt=parseFloat(l.amount)||0;
-            if(a?.category==='Income'&&l.dc==='CR') incData[mIdx]+=amt;
-            if(a?.category==='Expense'&&l.dc==='DB') expData[mIdx]+=amt;
+            // Accept both directions: IS import (income=DB, expense=CR) and normal (income=CR, expense=DB)
+            if(a?.category==='Income')  incData[mIdx]+=amt;
+            if(a?.category==='Expense') expData[mIdx]+=amt;
           });
         });
         con.forEach(c=>{
