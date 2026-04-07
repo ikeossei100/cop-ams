@@ -1797,57 +1797,75 @@ async function viewAccountActivity(code) {
     openingBalance -= parseFloat(c.amount)||0;  // contributions are CR
   });
 
+  const fmtBal = b => fmt(Math.abs(b)) + (b < 0 ? ' Cr' : ' Dr');
   let balance = openingBalance;
   let totalDb=0, totalCr=0;
+
+  // Build rows in Power Church ledger style
+  let obRow =
+    '<tr style="background:#fafafa;border-bottom:1px dashed #e5e7eb;">' +
+    '<td class="px-2 py-1.5 text-xs text-gray-400 whitespace-nowrap">' + from + '</td>' +
+    '<td class="px-2 py-1.5"></td>' +
+    '<td class="px-2 py-1.5 text-xs italic text-gray-500 font-medium">Beginning Balance</td>' +
+    '<td class="px-2 py-1.5"></td>' +
+    '<td class="px-2 py-1.5 text-right text-xs text-gray-500">' + (openingBalance>0.005?fmt(openingBalance):'') + '</td>' +
+    '<td class="px-2 py-1.5 text-right text-xs text-gray-500">' + (openingBalance<-0.005?fmt(Math.abs(openingBalance)):'') + '</td>' +
+    '<td class="px-2 py-1.5 text-right text-xs font-mono font-semibold text-gray-600">' + fmtBal(openingBalance) + '</td>' +
+    '</tr>';
+
   const bodyRows = entries.map(e=>{
     const db = e.dc==='DB'?e.amount:0;
     const cr = e.dc==='CR'?e.amount:0;
     balance += db - cr;
     totalDb += db; totalCr += cr;
-    const balSign = balance>=0?'':'text-red-600';
-    return `<tr>
-      <td>${e.date}</td>
-      <td class="font-mono text-xs">${e.ref}</td>
-      <td>${e.desc}</td>
-      <td><span class="text-xs px-2 py-0.5 rounded-full ${e.source==='Journal'?'bg-blue-50 text-blue-700':'bg-green-50 text-green-700'}">${e.source}</span></td>
-      <td class="text-right">${db>0?fmt(db):''}</td>
-      <td class="text-right">${cr>0?fmt(cr):''}</td>
-      <td class="text-right font-mono font-semibold ${balSign}">${fmt(Math.abs(balance))}${balance<0?' Cr':' Dr'}</td>
-    </tr>`;
+    return '<tr>' +
+      '<td class="px-2 py-1.5 text-xs whitespace-nowrap">' + e.date + '</td>' +
+      '<td class="px-2 py-1.5 text-xs font-mono whitespace-nowrap">' + (e.ref||'—') + '</td>' +
+      '<td class="px-2 py-1.5 text-xs">' + (e.desc||'') + '</td>' +
+      '<td class="px-2 py-1.5"><span class="text-xs px-1.5 py-0.5 rounded ' + (e.source==='Journal'?'bg-blue-50 text-blue-700':'bg-green-50 text-green-700') + '">' + e.source + '</span></td>' +
+      '<td class="px-2 py-1.5 text-right text-xs">' + (db>0.005?fmt(db):'') + '</td>' +
+      '<td class="px-2 py-1.5 text-right text-xs">' + (cr>0.005?fmt(cr):'') + '</td>' +
+      '<td class="px-2 py-1.5 text-right text-xs font-mono font-semibold ' + (balance<0?'text-red-600':'text-gray-800') + '">' + fmtBal(balance) + '</td>' +
+      '</tr>';
   });
 
   const closingBalance = balance;
   const noEntries = entries.length===0;
 
+  // Update table headers to match Power Church layout (7 cols including Source)
+  const thead = document.querySelector('#acct-act-table thead tr');
+  if (thead) thead.innerHTML =
+    '<th class="text-left px-2 py-1.5 text-xs font-semibold text-gray-600 uppercase tracking-wide whitespace-nowrap" style="width:90px">Date</th>' +
+    '<th class="text-left px-2 py-1.5 text-xs font-semibold text-gray-600 uppercase tracking-wide whitespace-nowrap" style="width:90px">Ref #</th>' +
+    '<th class="text-left px-2 py-1.5 text-xs font-semibold text-gray-600 uppercase tracking-wide">Description</th>' +
+    '<th class="text-left px-2 py-1.5 text-xs font-semibold text-gray-600 uppercase tracking-wide whitespace-nowrap" style="width:80px">Source</th>' +
+    '<th class="text-right px-2 py-1.5 text-xs font-semibold text-gray-600 uppercase tracking-wide whitespace-nowrap" style="width:110px">Debit</th>' +
+    '<th class="text-right px-2 py-1.5 text-xs font-semibold text-gray-600 uppercase tracking-wide whitespace-nowrap" style="width:110px">Credit</th>' +
+    '<th class="text-right px-2 py-1.5 text-xs font-semibold text-gray-600 uppercase tracking-wide whitespace-nowrap" style="width:130px">Balance</th>';
+
   if(noEntries){
-    document.getElementById('acct-act-tbody').innerHTML =
-      `<tr><td colspan="7" class="text-center py-8 text-gray-400">No posted activity for this account in the selected period.</td></tr>`;
+    document.getElementById('acct-act-tbody').innerHTML = obRow +
+      '<tr><td colspan="7" class="text-center py-8 text-gray-400 italic text-xs">No posted transactions in this period.</td></tr>';
   } else {
-    // Opening balance row
-    const obRows = `<tr class="bg-gray-50 italic text-gray-500">
-      <td colspan="4" class="font-medium">Opening Balance (before ${from})</td>
-      <td class="text-right">${openingBalance>0?fmt(openingBalance):''}</td>
-      <td class="text-right">${openingBalance<0?fmt(Math.abs(openingBalance)):''}</td>
-      <td class="text-right font-semibold font-mono">${fmt(Math.abs(openingBalance))}${openingBalance<0?' Cr':' Dr'}</td>
-    </tr>`;
-    document.getElementById('acct-act-tbody').innerHTML = obRows + bodyRows.join('');
+    document.getElementById('acct-act-tbody').innerHTML = obRow + bodyRows.join('');
   }
 
-  // Footer totals
-  document.getElementById('acct-act-tfoot').innerHTML = noEntries?'':`
-    <tr class="font-bold bg-gray-50">
-      <td colspan="4">Period Totals</td>
-      <td class="text-right">${fmt(totalDb)}</td>
-      <td class="text-right">${fmt(totalCr)}</td>
-      <td class="text-right font-mono">${fmt(Math.abs(closingBalance))}${closingBalance<0?' Cr':' Dr'}</td>
-    </tr>`;
+  // Footer totals — Power Church ending balance row
+  document.getElementById('acct-act-tfoot').innerHTML =
+    '<tr style="background:#f8fafc;border-top:2px solid #1a3c8f;">' +
+    '<td colspan="3" class="px-2 py-1.5 text-xs font-bold text-gray-700 uppercase tracking-wide">Period Totals &amp; Ending Balance</td>' +
+    '<td class="px-2 py-1.5"></td>' +
+    '<td class="px-2 py-1.5 text-right text-xs font-bold text-gray-800">' + (totalDb>0.005?fmt(totalDb):'') + '</td>' +
+    '<td class="px-2 py-1.5 text-right text-xs font-bold text-gray-800">' + (totalCr>0.005?fmt(totalCr):'') + '</td>' +
+    '<td class="px-2 py-1.5 text-right text-xs font-bold font-mono ' + (closingBalance<0?'text-red-600':'text-gray-800') + '">' + fmtBal(closingBalance) + '</td>' +
+    '</tr>';
 
-  // Summary cards
-  document.getElementById('acct-act-summary').innerHTML = `
-    <div class="stat-card"><div class="text-xs text-gray-500">Opening Balance</div><div class="font-bold text-gray-800">${fmt(Math.abs(openingBalance))} ${openingBalance<0?'Cr':'Dr'}</div></div>
-    <div class="stat-card" style="border-left-color:#059669"><div class="text-xs text-gray-500">Total Debits</div><div class="font-bold text-green-700">${fmt(totalDb)}</div></div>
-    <div class="stat-card" style="border-left-color:#6366f1"><div class="text-xs text-gray-500">Total Credits</div><div class="font-bold text-indigo-700">${fmt(totalCr)}</div></div>
-    <div class="stat-card" style="border-left-color:#d4a800"><div class="text-xs text-gray-500">Closing Balance</div><div class="font-bold ${closingBalance<0?'text-red-600':'text-gray-800'}">${fmt(Math.abs(closingBalance))} ${closingBalance<0?'Cr':'Dr'}</div></div>`;
+  // Summary stat cards
+  document.getElementById('acct-act-summary').innerHTML =
+    '<div class="stat-card"><div class="text-xs text-gray-500 uppercase tracking-wide mb-1">Beginning Balance</div><div class="font-bold text-gray-800 text-lg">' + fmtBal(openingBalance) + '</div></div>' +
+    '<div class="stat-card" style="border-left-color:#059669"><div class="text-xs text-gray-500 uppercase tracking-wide mb-1">Total Debits</div><div class="font-bold text-green-700 text-lg">' + fmt(totalDb) + '</div></div>' +
+    '<div class="stat-card" style="border-left-color:#6366f1"><div class="text-xs text-gray-500 uppercase tracking-wide mb-1">Total Credits</div><div class="font-bold text-indigo-700 text-lg">' + fmt(totalCr) + '</div></div>' +
+    '<div class="stat-card" style="border-left-color:#d4a800"><div class="text-xs text-gray-500 uppercase tracking-wide mb-1">Ending Balance</div><div class="font-bold text-lg ' + (closingBalance<0?'text-red-600':'text-gray-800') + '">' + fmtBal(closingBalance) + '</div></div>';
 
   // Store for export
   currentActivityData = {code, acct, from, to, entries, openingBalance, closingBalance, totalDb, totalCr};
@@ -3462,6 +3480,70 @@ async function genGeneralLedger(from,to) {
   }
 }
 
+// ── Shared helper: render one account block in Power Church ledger style ──
+function renderPCLedgerAccount(code, acct, periodEntries, openBal, from, to) {
+  const fmtBal = (b) => fmt(Math.abs(b)) + (b < 0 ? ' Cr' : ' Dr');
+  let balance = openBal, totalDb = 0, totalCr = 0;
+  let rows = '';
+  periodEntries.forEach(e => {
+    const db = e.dc==='DB' ? e.amount : 0;
+    const cr = e.dc==='CR' ? e.amount : 0;
+    balance += db - cr; totalDb += db; totalCr += cr;
+    rows +=
+      '<tr>' +
+      '<td class="text-xs whitespace-nowrap">' + e.date + '</td>' +
+      '<td class="text-xs font-mono whitespace-nowrap">' + (e.ref||'—') + '</td>' +
+      '<td class="text-xs">' + (e.desc||'') + '</td>' +
+      '<td class="text-right text-xs">' + (db>0.005?fmt(db):'') + '</td>' +
+      '<td class="text-right text-xs">' + (cr>0.005?fmt(cr):'') + '</td>' +
+      '<td class="text-right text-xs font-mono font-semibold ' + (balance<0?'text-red-600':'text-gray-800') + '">' + fmtBal(balance) + '</td>' +
+      '</tr>';
+  });
+
+  const catColor = acct?.category==='Income'?'#059669':acct?.category==='Expense'?'#b45309':acct?.category==='Asset'?'#1a3c8f':'#6b7280';
+
+  return (
+    '<div class="mb-5 break-inside-avoid">' +
+    // Account header — Power Church style
+    '<div style="background:#1a3c8f;color:white;padding:6px 12px;border-radius:6px 6px 0 0;" class="flex items-center gap-3 text-xs font-semibold">' +
+    '<span class="font-mono text-base font-bold">' + code + '</span>' +
+    '<span class="text-sm font-bold">' + (acct?.name||code) + '</span>' +
+    '<span class="ml-auto opacity-80">Category: ' + (acct?.category||'') + '&nbsp;&nbsp;|&nbsp;&nbsp;Fund: 01&nbsp;&nbsp;|&nbsp;&nbsp;Normal Balance: ' + (acct?.dc||'') + '</span>' +
+    '</div>' +
+    '<table class="w-full text-xs" style="border:1px solid #e5e7eb;border-top:none;">' +
+    '<thead><tr style="background:#f1f5f9;border-bottom:1px solid #cbd5e1;">' +
+    '<th class="text-left px-2 py-1.5 font-semibold text-gray-600 uppercase tracking-wide whitespace-nowrap" style="width:90px">Date</th>' +
+    '<th class="text-left px-2 py-1.5 font-semibold text-gray-600 uppercase tracking-wide whitespace-nowrap" style="width:90px">Ref #</th>' +
+    '<th class="text-left px-2 py-1.5 font-semibold text-gray-600 uppercase tracking-wide">Description</th>' +
+    '<th class="text-right px-2 py-1.5 font-semibold text-gray-600 uppercase tracking-wide whitespace-nowrap" style="width:110px">Debit</th>' +
+    '<th class="text-right px-2 py-1.5 font-semibold text-gray-600 uppercase tracking-wide whitespace-nowrap" style="width:110px">Credit</th>' +
+    '<th class="text-right px-2 py-1.5 font-semibold text-gray-600 uppercase tracking-wide whitespace-nowrap" style="width:130px">Balance</th>' +
+    '</tr></thead>' +
+    '<tbody>' +
+    // Opening balance row
+    '<tr style="background:#fafafa;border-bottom:1px dashed #e5e7eb;">' +
+    '<td class="px-2 py-1.5 text-xs text-gray-400 whitespace-nowrap">' + from + '</td>' +
+    '<td class="px-2 py-1.5"></td>' +
+    '<td class="px-2 py-1.5 text-xs italic text-gray-500 font-medium">Beginning Balance</td>' +
+    '<td class="px-2 py-1.5 text-right text-xs text-gray-500">' + (openBal>0.005?fmt(openBal):'') + '</td>' +
+    '<td class="px-2 py-1.5 text-right text-xs text-gray-500">' + (openBal<-0.005?fmt(Math.abs(openBal)):'') + '</td>' +
+    '<td class="px-2 py-1.5 text-right text-xs font-mono font-semibold text-gray-600">' + fmtBal(openBal) + '</td>' +
+    '</tr>' +
+    (rows || '<tr><td colspan="6" class="text-center py-3 text-gray-400 text-xs italic">No transactions in this period.</td></tr>') +
+    '</tbody>' +
+    '<tfoot>' +
+    '<tr style="background:#f8fafc;border-top:2px solid #1a3c8f;">' +
+    '<td colspan="3" class="px-2 py-1.5 text-xs font-bold text-gray-700 uppercase tracking-wide">Period Totals &amp; Ending Balance</td>' +
+    '<td class="px-2 py-1.5 text-right text-xs font-bold text-gray-800">' + (totalDb>0.005?fmt(totalDb):'') + '</td>' +
+    '<td class="px-2 py-1.5 text-right text-xs font-bold text-gray-800">' + (totalCr>0.005?fmt(totalCr):'') + '</td>' +
+    '<td class="px-2 py-1.5 text-right text-xs font-bold font-mono ' + (balance<0?'text-red-600':'text-gray-800') + '">' + fmtBal(balance) + '</td>' +
+    '</tr>' +
+    '</tfoot>' +
+    '</table>' +
+    '</div>'
+  );
+}
+
 async function genGLSingleAccount(from,to) {
   const acctCode=document.getElementById('rpt-account')?.value;
   if(!acctCode){toast('Select an account.','error');return;}
@@ -3481,45 +3563,21 @@ async function genGLSingleAccount(from,to) {
   entries.sort((a,b)=>a.date.localeCompare(b.date));
   const acct=coaCache.find(a=>a.code===acctCode);
 
-  // Opening balance (before period)
   let openBal=0;
   entries.filter(e=>e.date<from).forEach(e=>{ openBal+=e.dc==='DB'?e.amount:-e.amount; });
-
-  let balance=openBal;
   const periodEntries=entries.filter(e=>e.date>=from&&e.date<=to);
-  let totalDb=0,totalCr=0;
-  const rows=periodEntries.map(e=>{
-    const db=e.dc==='DB'?e.amount:0, cr=e.dc==='CR'?e.amount:0;
-    balance+=db-cr; totalDb+=db; totalCr+=cr;
-    return `<tr>
-      <td>${e.date}</td><td>${e.ref}</td><td>${e.desc}</td>
-      <td class="text-right">${db>0?fmt(db):''}</td>
-      <td class="text-right">${cr>0?fmt(cr):''}</td>
-      <td class="text-right font-mono ${balance<0?'text-red-600':''}">${fmt(Math.abs(balance))} ${balance<0?'Cr':'Dr'}</td>
-    </tr>`;
-  }).join('');
 
-  const obRow=`<tr class="bg-gray-50 italic text-gray-500 text-xs">
-    <td colspan="3">Opening Balance (before ${from})</td>
-    <td class="text-right">${openBal>0?fmt(openBal):''}</td>
-    <td class="text-right">${openBal<0?fmt(Math.abs(openBal)):''}</td>
-    <td class="text-right font-mono">${fmt(Math.abs(openBal))} ${openBal<0?'Cr':'Dr'}</td>
-  </tr>`;
-
-  document.getElementById('report-content').innerHTML=`
-    <h2 class="font-display text-lg font-bold mb-1" style="color:#1a3c8f;">General Ledger</h2>
-    <p class="text-xs text-gray-500 mb-1">Account: ${acctCode} – ${acct?.name||''} &nbsp;|&nbsp; Category: ${acct?.category||''}</p>
-    <p class="text-xs text-gray-500 mb-4">Period: ${from} to ${to}</p>
-    <table class="tbl">
-      <thead><tr><th>Date</th><th>Ref#</th><th>Description</th><th class="text-right">Debit</th><th class="text-right">Credit</th><th class="text-right">Balance</th></tr></thead>
-      <tbody>${obRow}${rows||'<tr><td colspan="6" class="text-center py-4 text-gray-400">No entries in period.</td></tr>'}</tbody>
-      <tfoot><tr class="font-bold bg-gray-50">
-        <td colspan="3">Period Totals</td>
-        <td class="text-right">${fmt(totalDb)}</td>
-        <td class="text-right">${fmt(totalCr)}</td>
-        <td class="text-right font-mono ${balance<0?'text-red-600':''}">${fmt(Math.abs(balance))} ${balance<0?'Cr':'Dr'}</td>
-      </tr></tfoot>
-    </table>`;
+  const printed = new Date().toLocaleDateString('en-CA',{year:'numeric',month:'long',day:'numeric'});
+  document.getElementById('report-content').innerHTML=
+    '<div class="mb-4 pb-3" style="border-bottom:2px solid #1a3c8f;">' +
+    '<div class="font-display text-xl font-bold" style="color:#1a3c8f;">Church of Pentecost Canada Inc</div>' +
+    '<div class="text-sm text-gray-600 font-semibold mt-0.5">General Ledger — Account Activity Report</div>' +
+    '<div class="flex justify-between mt-1">' +
+    '<span class="text-xs text-gray-500">Period: ' + from + ' to ' + to + '</span>' +
+    '<span class="text-xs text-gray-400">Printed: ' + printed + '</span>' +
+    '</div>' +
+    '</div>' +
+    renderPCLedgerAccount(acctCode, acct, periodEntries, openBal, from, to);
 }
 
 async function genGLAllAccounts(from,to) {
@@ -3531,7 +3589,6 @@ async function genGLAllAccounts(from,to) {
     getPostedContribs('2000-01-01',to)
   ]);
 
-  // Collect all account codes that have any activity
   const activeCodes=new Set();
   journals.forEach(j=>(j.lines||[]).forEach(l=>activeCodes.add(l.account_code)));
   contribs.forEach(c=>activeCodes.add(c.account_code));
@@ -3541,20 +3598,39 @@ async function genGLAllAccounts(from,to) {
     return;
   }
 
-  // Sort codes by COA sort order
   const sortedCodes=[...activeCodes].sort((a,b)=>{
-    const oa=(coaCache.find(x=>x.code===a)?.sort_order||999);
-    const ob=(coaCache.find(x=>x.code===b)?.sort_order||999);
+    const oa=(coaCache.find(x=>x.code===a)?.sort_order||parseInt(a)||999);
+    const ob=(coaCache.find(x=>x.code===b)?.sort_order||parseInt(b)||999);
     return oa-ob||a.localeCompare(b);
   });
 
-  let html=`<h2 class="font-display text-lg font-bold mb-1" style="color:#1a3c8f;">General Ledger — All Accounts</h2>
-    <p class="text-xs text-gray-500 mb-5">Period: ${from} to ${to} &nbsp;|&nbsp; ${sortedCodes.length} active account(s)</p>`;
+  const printed = new Date().toLocaleDateString('en-CA',{year:'numeric',month:'long',day:'numeric'});
+  let html =
+    '<div class="mb-5 pb-3" style="border-bottom:2px solid #1a3c8f;">' +
+    '<div class="font-display text-xl font-bold" style="color:#1a3c8f;">Church of Pentecost Canada Inc</div>' +
+    '<div class="text-sm text-gray-600 font-semibold mt-0.5">General Ledger — All Accounts</div>' +
+    '<div class="flex justify-between mt-1">' +
+    '<span class="text-xs text-gray-500">Period: ' + from + ' to ' + to + ' &nbsp;|&nbsp; ' + sortedCodes.length + ' active account(s)</span>' +
+    '<span class="text-xs text-gray-400">Printed: ' + printed + '</span>' +
+    '</div>' +
+    '</div>';
 
   let grandDb=0, grandCr=0;
 
+  // Group by category for section breaks (like Power Church)
+  const categories = ['Asset','Liability','Fund Balance','Income','Expense'];
+  let currentCat = null;
+
   for(const code of sortedCodes){
     const acct=coaCache.find(a=>a.code===code);
+    const cat = acct?.category || 'Other';
+
+    // Category section header
+    if(cat !== currentCat && categories.includes(cat)){
+      currentCat = cat;
+      html += '<div class="mt-6 mb-2 px-2 py-1 text-xs font-bold uppercase tracking-widest text-white rounded" style="background:#374151;letter-spacing:0.12em;">' + cat.toUpperCase() + ' ACCOUNTS</div>';
+    }
+
     const entries=[];
     journals.forEach(j=>(j.lines||[]).forEach(l=>{
       if(l.account_code===code)
@@ -3566,60 +3642,28 @@ async function genGLAllAccounts(from,to) {
     });
     entries.sort((a,b)=>a.date.localeCompare(b.date));
 
-    // Opening balance
     let openBal=0;
     entries.filter(e=>e.date<from).forEach(e=>{ openBal+=e.dc==='DB'?e.amount:-e.amount; });
-
     const periodEntries=entries.filter(e=>e.date>=from&&e.date<=to);
-    let balance=openBal, totalDb=0, totalCr=0;
 
-    const rows=periodEntries.map(e=>{
-      const db=e.dc==='DB'?e.amount:0, cr=e.dc==='CR'?e.amount:0;
-      balance+=db-cr; totalDb+=db; totalCr+=cr;
-      return `<tr>
-        <td>${e.date}</td><td class="text-xs">${e.ref}</td><td>${e.desc}</td>
-        <td class="text-right">${db>0?fmt(db):''}</td>
-        <td class="text-right">${cr>0?fmt(cr):''}</td>
-        <td class="text-right font-mono text-xs ${balance<0?'text-red-600':''}">${fmt(Math.abs(balance))} ${balance<0?'Cr':'Dr'}</td>
-      </tr>`;
-    }).join('');
+    // Accumulate grand totals
+    periodEntries.forEach(e=>{ if(e.dc==='DB') grandDb+=e.amount; else grandCr+=e.amount; });
 
-    grandDb+=totalDb; grandCr+=totalCr;
-
-    html+=`
-      <div class="mb-6">
-        <div class="flex items-center gap-3 mb-1 px-1">
-          <span class="font-bold text-sm text-cop-dark">${code}</span>
-          <span class="font-semibold text-sm text-gray-700">${acct?.name||'Unknown'}</span>
-          <span class="text-xs text-gray-400 ml-1">${acct?.category||''}</span>
-          <span class="ml-auto text-xs font-semibold ${balance<0?'text-red-600':'text-gray-700'}">Closing: ${fmt(Math.abs(balance))} ${balance<0?'Cr':'Dr'}</span>
-        </div>
-        <table class="tbl">
-          <thead><tr><th>Date</th><th>Ref#</th><th>Description</th><th class="text-right">Debit</th><th class="text-right">Credit</th><th class="text-right">Balance</th></tr></thead>
-          <tbody>
-            <tr class="bg-gray-50 italic text-gray-500 text-xs">
-              <td colspan="3">Opening Balance (before ${from})</td>
-              <td class="text-right">${openBal>0?fmt(openBal):''}</td>
-              <td class="text-right">${openBal<0?fmt(Math.abs(openBal)):''}</td>
-              <td class="text-right font-mono">${fmt(Math.abs(openBal))} ${openBal<0?'Cr':'Dr'}</td>
-            </tr>
-            ${rows||`<tr><td colspan="6" class="text-center py-2 text-gray-400 text-xs">No entries in period.</td></tr>`}
-          </tbody>
-          <tfoot><tr class="font-bold bg-gray-50 text-xs">
-            <td colspan="3">Period Totals</td>
-            <td class="text-right">${fmt(totalDb)}</td>
-            <td class="text-right">${fmt(totalCr)}</td>
-            <td class="text-right font-mono ${balance<0?'text-red-600':''}">${fmt(Math.abs(balance))} ${balance<0?'Cr':'Dr'}</td>
-          </tr></tfoot>
-        </table>
-      </div>`;
+    html += renderPCLedgerAccount(code, acct, periodEntries, openBal, from, to);
   }
 
-  // Grand totals
-  html+=`<div class="pt-3 mt-2 flex justify-between items-center" style="border-top:2px solid #1a3c8f;">
-    <span class="font-bold text-sm">Grand Totals (all accounts)</span>
-    <span class="text-sm font-bold">Debits: ${fmt(grandDb)} &nbsp;|&nbsp; Credits: ${fmt(grandCr)}</span>
-  </div>`;
+  // Grand summary footer
+  html +=
+    '<div class="mt-6 p-4 rounded-lg" style="background:#1a3c8f;color:white;">' +
+    '<div class="flex justify-between items-center">' +
+    '<span class="font-bold text-sm">GRAND TOTALS — All Accounts</span>' +
+    '<div class="flex gap-8 text-sm">' +
+    '<span>Total Debits: <strong>' + fmt(grandDb) + '</strong></span>' +
+    '<span>Total Credits: <strong>' + fmt(grandCr) + '</strong></span>' +
+    '<span ' + (Math.abs(grandDb-grandCr)<0.01?'':'style="color:#fcd34d;"') + '>Difference: <strong>' + fmt(Math.abs(grandDb-grandCr)) + '</strong> ' + (Math.abs(grandDb-grandCr)<0.01?'&#10003;':'&#9888;') + '</span>' +
+    '</div>' +
+    '</div>' +
+    '</div>';
 
   content.innerHTML=html;
 }
