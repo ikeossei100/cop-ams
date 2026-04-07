@@ -4362,12 +4362,126 @@ function showImportResult(success, msg) {
   el.className=success?'mt-4 p-4 rounded-lg border border-green-300 bg-green-50 text-sm text-green-800'
                       :'mt-4 p-4 rounded-lg border border-red-300 bg-red-50 text-sm text-red-700';
   el.innerHTML=success
-    ?`<strong>Import successful!</strong> ${msg}<br><br><button onclick="exportImportPDF()" class="btn-gold text-xs">Export PDF Confirmation</button>`
+    ?`<strong>Import successful!</strong> ${msg}<br><br>
+      <div class="flex gap-2 mt-2 flex-wrap">
+        <button onclick="showImportPostPreview()" class="btn-primary text-xs">View Import Preview</button>
+        <button onclick="exportImportPDF()" class="btn-gold text-xs">Export PDF Confirmation</button>
+        <button onclick="showScreen('journals');loadJournals()" class="btn-secondary text-xs">View in Journals</button>
+      </div>`
     :`<strong>Import failed:</strong> ${msg}`;
   el.style.display='block';
   el.scrollIntoView({behavior:'smooth'});
-  if(success) toast(msg,'success');
+  if(success) { toast(msg,'success'); showImportPostPreview(); }
   else toast(msg,'error');
+}
+
+function showImportPostPreview() {
+  const rec = lastImportRecord;
+  if (!rec || !rec.rows) { toast('No import data available.','error'); return; }
+
+  const isIS  = rec.type === 'is';
+  const rows  = rec.rows;
+
+  let totalDb=0, totalCr=0, totalIncome=0, totalExpense=0;
+  const tableRows = rows.map(r => {
+    const codeNum = parseInt(r.code)||0;
+    const debit   = r.debit  || 0;
+    const credit  = r.credit || 0;
+    totalDb += debit; totalCr += credit;
+    if (isIS) {
+      if (codeNum>=4000&&codeNum<=4999) totalIncome  += debit||credit;
+      else                              totalExpense += debit||credit;
+    }
+    const typeLabel = isIS
+      ? (codeNum>=4000&&codeNum<=4999
+          ? '<span class="px-1.5 py-0.5 rounded text-xs font-semibold bg-blue-100 text-blue-700">Income</span>'
+          : '<span class="px-1.5 py-0.5 rounded text-xs font-semibold bg-orange-100 text-orange-700">Expense</span>')
+      : (codeNum>=1000&&codeNum<=1999 ? '<span class="text-xs text-gray-500">Asset</span>'
+       : codeNum>=2000&&codeNum<=2999 ? '<span class="text-xs text-gray-500">Liability</span>'
+       : codeNum>=3000&&codeNum<=3999 ? '<span class="text-xs text-gray-500">Fund Bal</span>'
+       : '');
+    return `<tr>
+      <td class="font-mono text-xs">${r.code}</td>
+      <td class="text-xs">${r.name}</td>
+      <td class="text-right text-xs font-semibold ${debit>0?'text-blue-700':''}">${debit>0?fmt(debit):''}</td>
+      <td class="text-right text-xs font-semibold ${credit>0?'text-orange-700':''}">${credit>0?fmt(credit):''}</td>
+      <td>${typeLabel}</td>
+    </tr>`;
+  }).join('');
+
+  // Summary banner
+  let summaryHtml;
+  if (isIS) {
+    const net = totalIncome - totalExpense;
+    summaryHtml = `
+      <div class="grid grid-cols-3 gap-3 mb-4">
+        <div class="rounded-lg p-3 bg-blue-50 border border-blue-200 text-center">
+          <div class="text-xs text-blue-600 font-semibold uppercase tracking-wide mb-1">Total Income (DR)</div>
+          <div class="text-lg font-bold text-blue-800">${fmt(totalIncome)}</div>
+        </div>
+        <div class="rounded-lg p-3 bg-orange-50 border border-orange-200 text-center">
+          <div class="text-xs text-orange-600 font-semibold uppercase tracking-wide mb-1">Total Expenses (CR)</div>
+          <div class="text-lg font-bold text-orange-800">${fmt(totalExpense)}</div>
+        </div>
+        <div class="rounded-lg p-3 ${net>=0?'bg-green-50 border-green-200':'bg-red-50 border-red-200'} border text-center">
+          <div class="text-xs ${net>=0?'text-green-600':'text-red-600'} font-semibold uppercase tracking-wide mb-1">Excess Income over Expense</div>
+          <div class="text-lg font-bold ${net>=0?'text-green-800':'text-red-800'}">${net>=0?'':'-'}${fmt(Math.abs(net))}</div>
+        </div>
+      </div>`;
+  } else {
+    const diff = Math.abs(totalDb-totalCr);
+    summaryHtml = `
+      <div class="grid grid-cols-3 gap-3 mb-4">
+        <div class="rounded-lg p-3 bg-blue-50 border border-blue-200 text-center">
+          <div class="text-xs text-blue-600 font-semibold uppercase tracking-wide mb-1">Total Debits</div>
+          <div class="text-lg font-bold text-blue-800">${fmt(totalDb)}</div>
+        </div>
+        <div class="rounded-lg p-3 bg-purple-50 border border-purple-200 text-center">
+          <div class="text-xs text-purple-600 font-semibold uppercase tracking-wide mb-1">Total Credits</div>
+          <div class="text-lg font-bold text-purple-800">${fmt(totalCr)}</div>
+        </div>
+        <div class="rounded-lg p-3 ${diff<0.01?'bg-green-50 border-green-200':'bg-yellow-50 border-yellow-200'} border text-center">
+          <div class="text-xs font-semibold uppercase tracking-wide mb-1 ${diff<0.01?'text-green-600':'text-yellow-700'}">${diff<0.01?'✓ Balanced':'Difference'}</div>
+          <div class="text-lg font-bold ${diff<0.01?'text-green-800':'text-yellow-800'}">${diff<0.01?'—':fmt(diff)}</div>
+        </div>
+      </div>`;
+  }
+
+  const bodyHTML = `
+    <div class="bg-green-50 border border-green-200 rounded-lg p-3 mb-4 text-sm text-green-800">
+      ✅ <strong>${rows.length} accounts</strong> posted to journal as
+      <strong>${isIS?'Income & Expense Statement Import':'Opening Balance Import'}</strong>
+      dated <strong>${rec.date}</strong>. Reference: <strong>${isIS?'IS-IMPORT':'OB-IMPORT'}</strong>
+    </div>
+    ${summaryHtml}
+    <div class="overflow-y-auto" style="max-height:340px;">
+      <table class="tbl text-xs w-full">
+        <thead><tr>
+          <th>Code</th>
+          <th>Description</th>
+          <th class="text-right">${isIS?'Debit (Income)':'Debit'}</th>
+          <th class="text-right">${isIS?'Credit (Expense)':'Credit'}</th>
+          <th>Type</th>
+        </tr></thead>
+        <tbody>${tableRows}</tbody>
+        <tfoot><tr class="font-bold bg-gray-50 text-xs">
+          <td colspan="2">TOTALS</td>
+          <td class="text-right">${fmt(totalDb)}</td>
+          <td class="text-right">${fmt(totalCr)}</td>
+          <td></td>
+        </tr></tfoot>
+      </table>
+    </div>`;
+
+  const footerHTML = `
+    <button type="button" onclick="exportImportPDF()" class="btn-gold">Export PDF</button>
+    <button type="button" onclick="showScreen('journals');loadJournals();closeModal()" class="btn-secondary">View in Journals</button>
+    <button type="button" onclick="closeModal()" class="btn-primary">Done</button>`;
+
+  openModal(
+    isIS ? 'Import Complete — Income & Expense Statement' : 'Import Complete — Opening Balance',
+    bodyHTML, footerHTML
+  );
 }
 
 function exportImportPDF() {
