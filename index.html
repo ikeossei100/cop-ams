@@ -4211,7 +4211,24 @@ function runImportPreview(tab) {
   // ── Build preview using only string concatenation (no template literals — safe for all data) ──
   function e(v) { return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
-  const diff = Math.abs(totalDb - totalCr);
+  // ── Compute the 3001 balancing row exactly as confirmImport will post it ──
+  let balRow3001 = null;
+  if (isIS) {
+    const net = totalIncome - totalExpense;  // totalDb - totalCr at this point
+    if (Math.abs(net) > 0.005) {
+      balRow3001 = { code:'3001', name:'Fund Balance', debit: net>0?0:Math.abs(net), credit: net>0?Math.abs(net):0, isBal:true };
+    }
+  } else {
+    const diff3001 = totalDb - totalCr;
+    if (Math.abs(diff3001) > 0.005) {
+      balRow3001 = { code:'3001', name:'Fund Balance (Opening)', debit: diff3001>0?0:Math.abs(diff3001), credit: diff3001>0?Math.abs(diff3001):0, isBal:true };
+    }
+  }
+
+  // Final totals including the balancing row
+  const grandDb = totalDb + (balRow3001 ? balRow3001.debit  : 0);
+  const grandCr = totalCr + (balRow3001 ? balRow3001.credit : 0);
+  const diff = Math.abs(grandDb - grandCr);
 
   // Summary bar
   let summaryHtml = '<div class="flex flex-wrap gap-3 text-xs mb-3">';
@@ -4221,13 +4238,13 @@ function runImportPreview(tab) {
     summaryHtml += '<span class="px-3 py-1.5 rounded-full bg-orange-100 text-orange-800 font-semibold">Total Expenses (CR): ' + fmt(totalExpense) + '</span>';
     summaryHtml += '<span class="px-3 py-1.5 rounded-full font-semibold ' + (net>=0?'bg-green-100 text-green-800':'bg-red-100 text-red-800') + '">Excess Income over Expense: ' + (net<0?'-':'') + fmt(Math.abs(net)) + '</span>';
   } else {
-    summaryHtml += '<span class="px-3 py-1.5 rounded-full bg-blue-100 text-blue-800 font-semibold">Total Debits: ' + fmt(totalDb) + '</span>';
-    summaryHtml += '<span class="px-3 py-1.5 rounded-full bg-purple-100 text-purple-800 font-semibold">Total Credits: ' + fmt(totalCr) + '</span>';
+    summaryHtml += '<span class="px-3 py-1.5 rounded-full bg-blue-100 text-blue-800 font-semibold">Total Debits: ' + fmt(grandDb) + '</span>';
+    summaryHtml += '<span class="px-3 py-1.5 rounded-full bg-purple-100 text-purple-800 font-semibold">Total Credits: ' + fmt(grandCr) + '</span>';
     summaryHtml += '<span class="px-3 py-1.5 rounded-full font-semibold ' + (diff<0.01?'bg-green-100 text-green-800':'bg-yellow-100 text-yellow-800') + '">' + (diff<0.01?'&#10003; Balanced':'&#9888; Difference: ' + fmt(diff)) + '</span>';
   }
   summaryHtml += '</div>';
 
-  // Table rows
+  // Table rows — account rows first, then balancing 3001 row at the bottom
   let tbodyHtml = '';
   parsed.forEach(function(r) {
     tbodyHtml += '<tr>';
@@ -4242,6 +4259,16 @@ function runImportPreview(tab) {
     }
     tbodyHtml += '</tr>';
   });
+  // Add the 3001 balancing row highlighted in yellow
+  if (balRow3001) {
+    tbodyHtml += '<tr style="background:#fefce8;border-top:2px solid #ca8a04;">';
+    tbodyHtml += '<td class="font-mono text-xs font-bold text-yellow-800">3001</td>';
+    tbodyHtml += '<td class="text-xs font-bold text-yellow-800">' + e(balRow3001.name) + ' <span class="text-yellow-600 font-normal">(balancing entry)</span></td>';
+    tbodyHtml += '<td class="text-right text-xs font-bold text-yellow-800">' + (balRow3001.debit>0?fmt(balRow3001.debit):'') + '</td>';
+    tbodyHtml += '<td class="text-right text-xs font-bold text-yellow-800">' + (balRow3001.credit>0?fmt(balRow3001.credit):'') + '</td>';
+    tbodyHtml += '<td class="text-xs text-yellow-700 font-semibold">&#10003; Fund Bal</td>';
+    tbodyHtml += '</tr>';
+  }
 
   const dh = isIS ? 'Debit (Income)' : 'Debit';
   const ch = isIS ? 'Credit (Expense)' : 'Credit';
@@ -4256,7 +4283,7 @@ function runImportPreview(tab) {
     '<table class="tbl text-xs w-full">' +
     '<thead><tr><th>Code</th><th>Description (from file)</th><th class="text-right">' + dh + '</th><th class="text-right">' + ch + '</th><th>' + th + '</th></tr></thead>' +
     '<tbody>' + tbodyHtml + '</tbody>' +
-    '<tfoot><tr class="font-bold bg-gray-50"><td colspan="2">TOTALS</td><td class="text-right">' + fmt(totalDb) + '</td><td class="text-right">' + fmt(totalCr) + '</td><td></td></tr></tfoot>' +
+    '<tfoot><tr class="font-bold bg-gray-50"><td colspan="2">TOTALS</td><td class="text-right">' + fmt(grandDb) + '</td><td class="text-right">' + fmt(grandCr) + '</td><td></td></tr></tfoot>' +
     '</table></div>';
 
   const postLabel = isIS ? 'Post Income &amp; Expense Journal Entry' : 'Post Opening Balance Journal Entry';
