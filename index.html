@@ -4167,17 +4167,36 @@ function exportReportPDF() {
     }
   }
   if (activeReport === 'income-statement' && _isReportCache) {
-    // Build IS PDF table directly from cached data — avoids colspan/double-header scraping issues
     const c = _isReportCache;
     const fmtD = d => new Date(d+'T00:00:00').toLocaleDateString('en-CA',{year:'numeric',month:'short',day:'numeric'});
-    const colLabel1 = fmtD(c.from) + ' – ' + fmtD(c.to);
-    const colLabel2 = fmtD(c.ytdFrom) + ' – ' + fmtD(c.to);
 
-    const head = [['Code', 'Account Description', 'Current Period\n' + colLabel1, 'Year to Date\n' + colLabel2]];
+    // Print date-range sub-labels as plain text above the table (NOT inside header cells)
+    doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(80,80,80);
+    // usable width = 210 - 28 = 182mm; code=16, desc=auto, each amount col=40 → rightmost at 210-14=196
+    const colP_x = 210 - 14 - 40;        // left edge of Current Period column
+    const colY_x = 210 - 14;             // right edge of YTD column
+    doc.text('Current Period: ' + fmtD(c.from) + ' – ' + fmtD(c.to),   colP_x, y, { align: 'left' });
+    doc.text('Year to Date: '   + fmtD(c.ytdFrom) + ' – ' + fmtD(c.to), colY_x, y, { align: 'right' });
+    y += 5;
+
+    // Two clean header labels — no \n, no multiline confusion
+    const head = [['Code', 'Account Description', 'Current Period ($)', 'Year to Date ($)']];
     const body = [];
 
-    // Section: Income
-    body.push([{ content: 'INCOME', colSpan: 4, styles: { fillColor: [220,229,247], textColor: [26,60,143], fontStyle: 'bold', fontSize: 9 } }]);
+    const secRow  = label => [{ content: label, colSpan: 4, styles: { fillColor: [220,229,247], textColor: [26,60,143], fontStyle: 'bold', fontSize: 9, cellPadding: 3 } }];
+    const totRow  = (label, amtP, amtY) => [
+      { content: label, colSpan: 2, styles: { fillColor: [200,216,240], textColor: [26,60,143], fontStyle: 'bold', fontSize: 9 } },
+      { content: fmt(amtP), styles: { fillColor: [200,216,240], textColor: [26,60,143], fontStyle: 'bold', fontSize: 9, halign: 'right' } },
+      { content: fmt(amtY), styles: { fillColor: [180,200,235], textColor: [26,60,143], fontStyle: 'bold', fontSize: 9, halign: 'right' } },
+    ];
+    const surRow  = (amtP, amtY) => [
+      { content: 'NET SURPLUS / (DEFICIT)', colSpan: 2, styles: { fillColor: [26,60,143], textColor: [255,255,255], fontStyle: 'bold', fontSize: 10, cellPadding: 4 } },
+      { content: amtP<0?'('+fmt(Math.abs(amtP))+')':fmt(amtP), styles: { fillColor: [26,60,143], textColor: amtP>=0?[187,247,208]:[252,165,165], fontStyle: 'bold', fontSize: 10, halign: 'right', cellPadding: 4 } },
+      { content: amtY<0?'('+fmt(Math.abs(amtY))+')':fmt(amtY), styles: { fillColor: [21,47,114],  textColor: amtY>=0?[187,247,208]:[252,165,165], fontStyle: 'bold', fontSize: 10, halign: 'right', cellPadding: 4 } },
+    ];
+
+    // Income rows
+    body.push(secRow('INCOME'));
     c.allCodes.forEach(code => {
       const n = parseInt(code)||0;
       if (n < 4000 || n > 4999) return;
@@ -4187,14 +4206,15 @@ function exportReportPDF() {
       const netY = Math.max(by.debit, by.credit);
       if (netP < 0.005 && netY < 0.005) return;
       const name = coaCache.find(a=>a.code===code)?.name || code;
-      body.push([code, name, netP>=0.005?fmt(netP):'—', netY>=0.005?fmt(netY):'—']);
+      body.push([code, name,
+        { content: netP>=0.005?fmt(netP):'—', styles:{ halign:'right' } },
+        { content: netY>=0.005?fmt(netY):'—', styles:{ halign:'right' } },
+      ]);
     });
-    body.push([{ content: 'Total Income', colSpan: 2, styles: { fillColor: [232,237,247], textColor: [26,60,143], fontStyle: 'bold' } },
-      { content: fmt(c.totInP), styles: { fillColor: [232,237,247], textColor: [26,60,143], fontStyle: 'bold', halign: 'right' } },
-      { content: fmt(c.totInY), styles: { fillColor: [220,229,247], textColor: [26,60,143], fontStyle: 'bold', halign: 'right' } }]);
+    body.push(totRow('Total Income', c.totInP, c.totInY));
 
-    // Section: Expenditure
-    body.push([{ content: 'EXPENDITURE', colSpan: 4, styles: { fillColor: [220,229,247], textColor: [26,60,143], fontStyle: 'bold', fontSize: 9 } }]);
+    // Expenditure rows
+    body.push(secRow('EXPENDITURE'));
     c.allCodes.forEach(code => {
       const n = parseInt(code)||0;
       if (n < 5000 || n > 5999) return;
@@ -4204,35 +4224,31 @@ function exportReportPDF() {
       const netY = Math.max(by.debit, by.credit);
       if (netP < 0.005 && netY < 0.005) return;
       const name = coaCache.find(a=>a.code===code)?.name || code;
-      body.push([code, name, netP>=0.005?fmt(netP):'—', netY>=0.005?fmt(netY):'—']);
+      body.push([code, name,
+        { content: netP>=0.005?fmt(netP):'—', styles:{ halign:'right' } },
+        { content: netY>=0.005?fmt(netY):'—', styles:{ halign:'right' } },
+      ]);
     });
-    body.push([{ content: 'Total Expenditure', colSpan: 2, styles: { fillColor: [232,237,247], textColor: [26,60,143], fontStyle: 'bold' } },
-      { content: fmt(c.totExpP), styles: { fillColor: [232,237,247], textColor: [26,60,143], fontStyle: 'bold', halign: 'right' } },
-      { content: fmt(c.totExpY), styles: { fillColor: [220,229,247], textColor: [26,60,143], fontStyle: 'bold', halign: 'right' } }]);
-
-    // Net surplus row
-    const fP = c.netP<0?'('+fmt(Math.abs(c.netP))+')':fmt(c.netP);
-    const fY = c.netY<0?'('+fmt(Math.abs(c.netY))+')':fmt(c.netY);
-    const sColor = [26,60,143];
-    body.push([
-      { content: 'NET SURPLUS / (DEFICIT)', colSpan: 2, styles: { fillColor: sColor, textColor: [255,255,255], fontStyle: 'bold', fontSize: 10 } },
-      { content: fP, styles: { fillColor: sColor, textColor: c.netP>=0?[187,247,208]:[252,165,165], fontStyle: 'bold', fontSize: 10, halign: 'right' } },
-      { content: fY, styles: { fillColor: [21,47,114], textColor: c.netY>=0?[187,247,208]:[252,165,165], fontStyle: 'bold', fontSize: 10, halign: 'right' } },
-    ]);
+    body.push(totRow('Total Expenditure', c.totExpP, c.totExpY));
+    body.push(surRow(c.netP, c.netY));
 
     doc.autoTable({
       head,
       body,
       startY: y,
       theme: 'striped',
-      headStyles: { fillColor: [26,60,143], textColor: [255,255,255], fontStyle: 'bold', fontSize: 8, halign: 'center' },
-      bodyStyles: { fontSize: 8 },
-      columnStyles: {
-        0: { cellWidth: 18, halign: 'left', font: 'courier' },
-        1: { cellWidth: 'auto' },
-        2: { cellWidth: 38, halign: 'right' },
-        3: { cellWidth: 38, halign: 'right' },
+      headStyles: {
+        fillColor: [26,60,143], textColor: [255,255,255],
+        fontStyle: 'bold', fontSize: 9,
+        halign: 'left',
       },
+      columnStyles: {
+        0: { cellWidth: 16, halign: 'left'  },
+        1: { cellWidth: 82               },   // fixed description width so amounts don't squeeze
+        2: { cellWidth: 40, halign: 'right' },
+        3: { cellWidth: 40, halign: 'right' },
+      },
+      bodyStyles: { fontSize: 8.5 },
       margin: { left: 14, right: 14 },
     });
     y = doc.lastAutoTable.finalY + 8;
