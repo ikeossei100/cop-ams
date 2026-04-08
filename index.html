@@ -4264,8 +4264,7 @@ function exportReportPDF() {
     // Helper to build a section's body rows
     const bsSecRow = label => [{ content: label, colSpan: 3, styles: { fillColor: [220,229,247], textColor: [26,60,143], fontStyle: 'bold', fontSize: 9, cellPadding: 3 } }];
     const bsTotRow = (label, amt, bold) => [
-      { content: '', styles: { cellWidth: 16 } },
-      { content: label, styles: { fontStyle: bold?'bold':'normal', fontSize: bold?9.5:9, textColor: [26,60,143], fillColor: [200,216,240] } },
+      { content: label, colSpan: 2, styles: { fontStyle: bold?'bold':'normal', fontSize: bold?9.5:9, textColor: [26,60,143], fillColor: [200,216,240] } },
       { content: fmt(amt), styles: { halign: 'right', fontStyle: bold?'bold':'normal', fontSize: bold?9.5:9, textColor: [26,60,143], fillColor: [200,216,240] } },
     ];
 
