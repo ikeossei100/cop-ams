@@ -3158,104 +3158,200 @@ async function genIncomeStatement(from,to) {
       const net=Math.max(b.debit,b.credit);
       if(net<0.005) return;
       totalIncome+=net;
-      incomeRows+='<tr><td class="font-mono text-xs">'+code+'</td><td class="text-xs">'+name+'</td><td class="text-right text-xs">'+fmt(net)+'</td></tr>';
+      incomeRows+=
+        '<tr style="border-bottom:1px solid #f3f4f6;">' +
+        '<td style="padding:4px 8px;font-family:monospace;font-size:12px;color:#374151;">' + code + '</td>' +
+        '<td style="padding:4px 8px;font-size:13px;">' + name + '</td>' +
+        '<td style="padding:4px 8px;text-align:right;font-size:13px;">' + fmt(net) + '</td>' +
+        '</tr>';
     }
     if(n>=5000&&n<=5999){
       const net=Math.max(b.debit,b.credit);
       if(net<0.005) return;
       totalExpense+=net;
-      expenseRows+='<tr><td class="font-mono text-xs">'+code+'</td><td class="text-xs">'+name+'</td><td class="text-right text-xs">'+fmt(net)+'</td></tr>';
+      expenseRows+=
+        '<tr style="border-bottom:1px solid #f3f4f6;">' +
+        '<td style="padding:4px 8px;font-family:monospace;font-size:12px;color:#374151;">' + code + '</td>' +
+        '<td style="padding:4px 8px;font-size:13px;">' + name + '</td>' +
+        '<td style="padding:4px 8px;text-align:right;font-size:13px;">' + fmt(net) + '</td>' +
+        '</tr>';
     }
   });
 
-  const net=totalIncome-totalExpense;
-  const thead='<thead><tr><th>Code</th><th>Account</th><th class="text-right">Amount</th></tr></thead>';
-  document.getElementById('report-content').innerHTML=
-    '<h2 class="font-display text-lg font-bold mb-1" style="color:#1a3c8f;">Income &amp; Expense Statement</h2>'+
-    '<p class="text-xs text-gray-500 mb-4">Period: '+from+' to '+to+'</p>'+
-    '<h3 class="font-bold mb-1 mt-3" style="color:#152f72;">INCOME</h3>'+
-    '<table class="tbl mb-3">'+thead+'<tbody>'+(incomeRows||'<tr><td colspan="3" class="text-center text-gray-400 py-3 text-xs">No income entries</td></tr>')+'</tbody>'+
-    '<tfoot><tr class="font-bold bg-gray-50"><td colspan="2">Total Income</td><td class="text-right">'+fmt(totalIncome)+'</td></tr></tfoot></table>'+
-    '<h3 class="font-bold mb-1" style="color:#152f72;">EXPENDITURE</h3>'+
-    '<table class="tbl mb-3">'+thead+'<tbody>'+(expenseRows||'<tr><td colspan="3" class="text-center text-gray-400 py-3 text-xs">No expense entries</td></tr>')+'</tbody>'+
-    '<tfoot><tr class="font-bold bg-gray-50"><td colspan="2">Total Expenditure</td><td class="text-right">'+fmt(totalExpense)+'</td></tr></tfoot></table>'+
-    '<div class="flex justify-between items-center border-t-2 pt-3 mt-2" style="border-color:#1a3c8f;">'+
-    '<span class="font-bold text-base">NET SURPLUS / (DEFICIT)</span>'+
-    '<span class="font-bold text-xl '+(net>=0?'text-green-700':'text-red-700')+'">'+(net<0?'('+fmt(Math.abs(net))+')':fmt(net))+'</span>'+
+  const net = totalIncome - totalExpense;
+  const fromFmt = new Date(from).toLocaleDateString('en-CA',{year:'numeric',month:'long',day:'numeric'});
+  const toFmt   = new Date(to).toLocaleDateString('en-CA',{year:'numeric',month:'long',day:'numeric'});
+  const printed = new Date().toLocaleDateString('en-CA',{year:'numeric',month:'long',day:'numeric'});
+
+  const tblStyle = 'width:100%;border-collapse:collapse;';
+  const thStyle  = 'background:#1a3c8f;color:white;padding:6px 8px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;text-align:left;';
+  const thRStyle = thStyle+'text-align:right;';
+  const secHdr   = (label) =>
+    '<tr><td colspan="3" style="background:#e8edf7;padding:5px 8px;font-weight:700;font-size:12px;color:#1a3c8f;letter-spacing:.04em;text-transform:uppercase;border-top:2px solid #1a3c8f;">' + label + '</td></tr>';
+  const totalRow = (label, amt, bold, color) =>
+    '<tr style="background:#f1f5fd;">' +
+    '<td colspan="2" style="padding:5px 8px;font-weight:' + (bold?'700':'600') + ';font-size:' + (bold?'13':'12') + 'px;color:' + (color||'#1a3c8f') + ';">' + label + '</td>' +
+    '<td style="padding:5px 8px;text-align:right;font-weight:' + (bold?'700':'600') + ';font-size:' + (bold?'13':'12') + 'px;color:' + (color||'#1a3c8f') + ';border-top:1px solid #93c5fd;">' + fmt(amt) + '</td>' +
+    '</tr>';
+  const noEntries = '<tr><td colspan="3" style="padding:8px;color:#9ca3af;font-size:12px;font-style:italic;">No entries in this period</td></tr>';
+
+  const isTable =
+    '<table style="' + tblStyle + '">' +
+    '<thead><tr><th style="' + thStyle + '">Code</th><th style="' + thStyle + '">Account Description</th><th style="' + thRStyle + '">Amount ($)</th></tr></thead>' +
+    '<tbody>' +
+    secHdr('Income') +
+    (incomeRows || noEntries) +
+    totalRow('Total Income', totalIncome, false) +
+    secHdr('Expenditure') +
+    (expenseRows || noEntries) +
+    totalRow('Total Expenditure', totalExpense, false) +
+    '</tbody></table>';
+
+  const surplusColor = net >= 0 ? '#15803d' : '#dc2626';
+  const surplusLabel = net >= 0 ? 'Net Surplus' : 'Net Deficit';
+  const surplusFmt   = net < 0 ? '(' + fmt(Math.abs(net)) + ')' : fmt(net);
+
+  document.getElementById('report-content').innerHTML =
+    // Report header — Power Church style
+    '<div style="border-bottom:3px solid #1a3c8f;padding-bottom:10px;margin-bottom:18px;">' +
+    '<div style="font-family:\'Playfair Display\',serif;font-size:20px;font-weight:700;color:#1a3c8f;">Church of Pentecost Canada Inc</div>' +
+    '<div style="font-size:15px;font-weight:700;color:#374151;margin-top:2px;">Income &amp; Expense Statement</div>' +
+    '<div style="display:flex;justify-content:space-between;margin-top:4px;">' +
+    '<span style="font-size:12px;color:#6b7280;">Period: ' + fromFmt + ' to ' + toFmt + ' &nbsp;|&nbsp; Fund 01 — General Fund</span>' +
+    '<span style="font-size:11px;color:#9ca3af;">Printed: ' + printed + '</span>' +
+    '</div>' +
+    '</div>' +
+    // Main table
+    isTable +
+    // Net surplus/deficit footer
+    '<div style="margin-top:16px;padding:10px 14px;border-radius:8px;background:' + (net>=0?'#f0fdf4':'#fef2f2') + ';border:1.5px solid ' + (net>=0?'#86efac':'#fca5a5') + ';display:flex;justify-content:space-between;align-items:center;">' +
+    '<span style="font-weight:700;font-size:14px;color:' + surplusColor + ';">' + surplusLabel + '</span>' +
+    '<span style="font-weight:700;font-size:18px;color:' + surplusColor + ';">' + surplusFmt + '</span>' +
     '</div>';
 }
 
 async function genBalanceSheet(from,to) {
-  // Balance Sheet accounts (Asset/Liability/Fund Balance) accumulate from all time, not just the period.
-  // Income/Expense accounts also need all-time totals for current-year net.
+  // Fetch all posted journals and contributions from all-time (BS accounts accumulate)
   const [allJnl, allCon] = await Promise.all([
     getPostedJournals('2000-01-01', to),
     getPostedContribs('2000-01-01', to)
   ]);
-  const bal = buildAccountBalances(allJnl, allCon);
 
-  // Build a section by summing directly from bal by code range — includes accounts not in COA.
-  // Names come from COA cache where available, fall back to code itself.
-  const section = (codeFrom, codeTo, label, debitPositive) => {
+  // ── KEY FIX: The IS import posts income(4xxx) as DB and expenses(5xxx) as CR,
+  // then adds a 3001 CR to balance. That 3001 already sits in Fund Balance (3xxx).
+  // If we ALSO add (income - expense) as "Current Year Surplus" we double-count.
+  // Solution: compute current year surplus ONLY from non-import journals.
+  const importRefs = new Set(['IS-IMPORT', 'OB-IMPORT']);
+  const periodJnl  = allJnl.filter(j => !importRefs.has(j.ref_no));  // live entries only
+  const periodCon  = allCon;
+
+  // All-time balance for BS accounts (1xxx, 2xxx, 3xxx)
+  const balAll  = buildAccountBalances(allJnl,  allCon);
+  // Period-only balance for IS accounts (4xxx, 5xxx) — excludes imports already netted to 3001
+  const balLive = buildAccountBalances(periodJnl, periodCon);
+
+  // Helper: build one report section from a balance object, by code range
+  const section = (bal, codeFrom, codeTo, debitPositive) => {
     const codes = Object.keys(bal)
       .filter(c => { const n=parseInt(c)||0; return n>=codeFrom && n<=codeTo; })
-      .sort((a,b) => (parseInt(a)||0)-(parseInt(b)||0));
-    let total = 0;
-    const rows = codes.map(code => {
+      .sort((a,b)=>(parseInt(a)||0)-(parseInt(b)||0));
+    let total = 0, rows = '';
+    codes.forEach(code => {
       const b = bal[code];
-      const acct = coaCache.find(a=>a.code===code);
-      const name = acct?.name || code;
-      const net = debitPositive ? (b.debit - b.credit) : (b.credit - b.debit);
-      if (Math.abs(net) < 0.005) return ''; // skip zero-balance rows
+      const name = coaCache.find(a=>a.code===code)?.name || code;
+      const net  = debitPositive ? (b.debit-b.credit) : (b.credit-b.debit);
+      if (Math.abs(net) < 0.005) return;
       total += net;
-      return '<tr>' +
-        '<td class="pl-4 font-mono text-xs">' + code + '</td>' +
-        '<td class="pl-4 text-xs">' + name + '</td>' +
-        '<td class="text-right text-xs">' + fmt(net) + '</td>' +
+      rows +=
+        '<tr>' +
+        '<td style="padding:4px 8px;font-family:monospace;font-size:12px;color:#374151;">' + code + '</td>' +
+        '<td style="padding:4px 8px;font-size:13px;">' + name + '</td>' +
+        '<td style="padding:4px 8px;text-align:right;font-size:13px;">' + fmt(net) + '</td>' +
         '</tr>';
-    }).join('');
-    return { rows, total, label };
+    });
+    return { rows, total };
   };
 
-  const assets      = section(1000, 1999, 'ASSETS',        true);
-  const liabilities = section(2000, 2999, 'LIABILITIES',   false);
-  const fundBal     = section(3000, 3999, 'FUND BALANCE',  false);
+  const assets      = section(balAll,  1000, 1999, true);
+  const liabilities = section(balAll,  2000, 2999, false);
+  const fundBal     = section(balAll,  3000, 3999, false);
 
-  // Current Year surplus — sum income (4xxx) and expense (5xxx) by code range
-  let retainedIncome = 0, retainedExpense = 0;
-  Object.keys(bal).forEach(code => {
-    const n = parseInt(code)||0;
-    const b = bal[code];
-    if (n>=4000 && n<=4999) retainedIncome  += Math.max(b.debit, b.credit);
-    if (n>=5000 && n<=5999) retainedExpense += Math.max(b.debit, b.credit);
+  // Current year net from LIVE (non-import) transactions only
+  let cyIncome = 0, cyExpense = 0;
+  Object.keys(balLive).forEach(code => {
+    const n = parseInt(code)||0, b = balLive[code];
+    if (n>=4000&&n<=4999) cyIncome  += Math.max(b.debit, b.credit);
+    if (n>=5000&&n<=5999) cyExpense += Math.max(b.debit, b.credit);
   });
-  const currentNet  = retainedIncome - retainedExpense;
+  const currentNet  = cyIncome - cyExpense;
   const totalEquity = liabilities.total + fundBal.total + currentNet;
-  const balanced    = Math.abs(assets.total - totalEquity) < 1;
+  const diff        = assets.total - totalEquity;
+  const balanced    = Math.abs(diff) < 0.02;
 
-  const thead = '<thead><tr><th>Code</th><th>Account</th><th class="text-right">Amount</th></tr></thead>';
+  // ── Power Church–style layout ──
+  const asOf = new Date(to).toLocaleDateString('en-CA',{year:'numeric',month:'long',day:'numeric'});
+  const printed = new Date().toLocaleDateString('en-CA',{year:'numeric',month:'long',day:'numeric'});
+
+  const tblStyle = 'width:100%;border-collapse:collapse;margin-bottom:0;';
+  const thStyle  = 'background:#1a3c8f;color:white;padding:6px 8px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;text-align:left;';
+  const thRStyle = thStyle+'text-align:right;';
+  const secHdr   = (label) =>
+    '<tr><td colspan="3" style="background:#e8edf7;padding:5px 8px;font-weight:700;font-size:12px;color:#1a3c8f;letter-spacing:.04em;text-transform:uppercase;border-top:2px solid #1a3c8f;">' + label + '</td></tr>';
+  const totalRow = (label, amt, bold) =>
+    '<tr style="background:#f1f5fd;">' +
+    '<td colspan="2" style="padding:5px 8px;font-weight:' + (bold?'700':'600') + ';font-size:' + (bold?'13':'12') + 'px;color:#1a3c8f;">' + label + '</td>' +
+    '<td style="padding:5px 8px;text-align:right;font-weight:' + (bold?'700':'600') + ';font-size:' + (bold?'13':'12') + 'px;color:#1a3c8f;border-top:1px solid #93c5fd;">' + fmt(amt) + '</td>' +
+    '</tr>';
+
+  // Assets table
+  const assetsTable =
+    '<table style="' + tblStyle + '">' +
+    '<thead><tr><th style="' + thStyle + '">Code</th><th style="' + thStyle + '">Account Description</th><th style="' + thRStyle + '">Amount ($)</th></tr></thead>' +
+    '<tbody>' + secHdr('Assets') + (assets.rows||'<tr><td colspan="3" style="padding:6px 8px;color:#9ca3af;font-size:12px;font-style:italic;">No entries</td></tr>') +
+    totalRow('Total Assets', assets.total, true) +
+    '</tbody></table>';
+
+  // Liabilities + Fund Balance table
+  const fbCyRow = Math.abs(currentNet) > 0.005 ?
+    '<tr>' +
+    '<td style="padding:4px 8px;font-family:monospace;font-size:12px;color:#374151;">—</td>' +
+    '<td style="padding:4px 8px;font-size:13px;font-style:italic;">Current Year Surplus / (Deficit)</td>' +
+    '<td style="padding:4px 8px;text-align:right;font-size:13px;' + (currentNet<0?'color:#dc2626;':'') + '">' + (currentNet<0?'(' + fmt(Math.abs(currentNet)) + ')':fmt(currentNet)) + '</td>' +
+    '</tr>' : '';
+
+  const equityTable =
+    '<table style="' + tblStyle + '">' +
+    '<thead><tr><th style="' + thStyle + '">Code</th><th style="' + thStyle + '">Account Description</th><th style="' + thRStyle + '">Amount ($)</th></tr></thead>' +
+    '<tbody>' +
+    secHdr('Liabilities') +
+    (liabilities.rows||'<tr><td colspan="3" style="padding:6px 8px;color:#9ca3af;font-size:12px;font-style:italic;">No entries</td></tr>') +
+    totalRow('Total Liabilities', liabilities.total, false) +
+    secHdr('Fund Balance') +
+    (fundBal.rows||'') +
+    fbCyRow +
+    totalRow('Total Fund Balance', fundBal.total + currentNet, false) +
+    totalRow('Total Liabilities & Fund Balance', totalEquity, true) +
+    '</tbody></table>';
+
   document.getElementById('report-content').innerHTML =
-    '<h2 class="font-display text-lg font-bold mb-1" style="color:#1a3c8f;">Balance Sheet</h2>' +
-    '<p class="text-xs text-gray-500 mb-4">As at ' + to + ' &nbsp;|&nbsp; Church of Pentecost Canada Inc — General Fund</p>' +
-    '<div class="grid md:grid-cols-2 gap-6">' +
-    '<div>' +
-    '<h3 class="font-bold mb-1" style="color:#152f72;">ASSETS</h3>' +
-    '<table class="tbl mb-2">' + thead + '<tbody>' + (assets.rows||'<tr><td colspan="3" class="text-center text-gray-400 py-3 text-xs">No asset entries</td></tr>') + '</tbody>' +
-    '<tfoot><tr class="font-bold bg-gray-50"><td colspan="2">Total Assets</td><td class="text-right">' + fmt(assets.total) + '</td></tr></tfoot></table>' +
+    // Report header — Power Church style
+    '<div style="border-bottom:3px solid #1a3c8f;padding-bottom:10px;margin-bottom:18px;">' +
+    '<div style="font-family:\'Playfair Display\',serif;font-size:20px;font-weight:700;color:#1a3c8f;">Church of Pentecost Canada Inc</div>' +
+    '<div style="font-size:15px;font-weight:700;color:#374151;margin-top:2px;">Balance Sheet</div>' +
+    '<div style="display:flex;justify-content:space-between;margin-top:4px;">' +
+    '<span style="font-size:12px;color:#6b7280;">As of ' + asOf + ' &nbsp;|&nbsp; Fund 01 — General Fund</span>' +
+    '<span style="font-size:11px;color:#9ca3af;">Printed: ' + printed + '</span>' +
     '</div>' +
-    '<div>' +
-    '<h3 class="font-bold mb-1" style="color:#152f72;">LIABILITIES</h3>' +
-    '<table class="tbl mb-2">' + thead + '<tbody>' + (liabilities.rows||'<tr><td colspan="3" class="text-center text-gray-400 py-3 text-xs">No liability entries</td></tr>') + '</tbody>' +
-    '<tfoot><tr class="font-bold bg-gray-50"><td colspan="2">Total Liabilities</td><td class="text-right">' + fmt(liabilities.total) + '</td></tr></tfoot></table>' +
-    '<h3 class="font-bold mb-1 mt-4" style="color:#152f72;">FUND BALANCE</h3>' +
-    '<table class="tbl mb-2">' + thead + '<tbody>' + (fundBal.rows||'') +
-    '<tr><td class="pl-4 font-mono text-xs">—</td><td class="pl-4 text-xs">Current Year Surplus / (Deficit)</td><td class="text-right text-xs ' + (currentNet<0?'text-red-600':'') + '">' + (currentNet<0?'('+fmt(Math.abs(currentNet))+')':fmt(currentNet)) + '</td></tr>' +
-    '</tbody>' +
-    '<tfoot><tr class="font-bold bg-gray-50"><td colspan="2">Total Fund Balance &amp; Liabilities</td><td class="text-right">' + fmt(totalEquity) + '</td></tr></tfoot></table>' +
-    '<p class="text-xs mt-2 font-semibold ' + (balanced?'text-green-600':'text-red-600') + '">' +
-    (balanced ? '&#10003; Balanced' : '&#9888; Difference: ' + fmt(Math.abs(assets.total-totalEquity))) +
-    '</p>' +
     '</div>' +
+    // Two-column layout
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;">' +
+    '<div>' + assetsTable + '</div>' +
+    '<div>' + equityTable + '</div>' +
+    '</div>' +
+    // Balance check
+    '<div style="margin-top:16px;padding:10px 14px;border-radius:8px;background:' + (balanced?'#f0fdf4':'#fef2f2') + ';border:1.5px solid ' + (balanced?'#86efac':'#fca5a5') + ';display:flex;justify-content:space-between;align-items:center;">' +
+    '<span style="font-weight:700;font-size:13px;color:' + (balanced?'#15803d':'#dc2626') + ';">' + (balanced?'✓ Balance Sheet is Balanced':'⚠ Out of Balance') + '</span>' +
+    '<span style="font-size:12px;color:#6b7280;">Total Assets: <strong>' + fmt(assets.total) + '</strong> &nbsp;|&nbsp; Total Liabilities & Fund Balance: <strong>' + fmt(totalEquity) + '</strong>' + (!balanced?' &nbsp;|&nbsp; Difference: <strong style="color:#dc2626;">' + fmt(Math.abs(diff)) + '</strong>':'') + '</span>' +
     '</div>';
 }
 
