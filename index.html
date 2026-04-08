@@ -3119,97 +3119,144 @@ function buildAccountBalances(journals,contribs) {
 async function genTrialBalance(from,to) {
   const [journals,contribs]=await Promise.all([getPostedJournals(from,to),getPostedContribs(from,to)]);
   const bal=buildAccountBalances(journals,contribs);
-  let totalDb=0,totalCr=0;
-  const rows=coaCache.filter(a=>a.type==='Detail'&&bal[a.code]).map(a=>{
-    const b=bal[a.code];
+  let totalDb=0, totalCr=0;
+  // Sum from bal directly by sorted code — includes accounts not in COA
+  const rows=Object.keys(bal).sort((a,b)=>(parseInt(a)||0)-(parseInt(b)||0)).map(code=>{
+    const b=bal[code];
+    const acct=coaCache.find(a=>a.code===code);
     totalDb+=b.debit; totalCr+=b.credit;
-    return `<tr><td>${a.code}</td><td>${a.name}</td><td class="text-right">${b.debit>0?fmt(b.debit):''}</td><td class="text-right">${b.credit>0?fmt(b.credit):''}</td></tr>`;
+    return '<tr>' +
+      '<td class="font-mono text-xs">'+code+'</td>' +
+      '<td class="text-xs">'+(acct?.name||code)+'</td>' +
+      '<td class="text-right text-xs">'+(b.debit>0.005?fmt(b.debit):'')+'</td>' +
+      '<td class="text-right text-xs">'+(b.credit>0.005?fmt(b.credit):'')+'</td>' +
+      '</tr>';
   }).join('');
-  document.getElementById('report-content').innerHTML=`
-    <h2 class="font-display text-lg font-bold mb-1" style="color:#1a3c8f;">Trial Balance</h2>
-    <p class="text-xs text-gray-500 mb-4">Period: ${from} to ${to}</p>
-    <table class="tbl"><thead><tr><th>Code</th><th>Account</th><th class="text-right">Debit</th><th class="text-right">Credit</th></tr></thead>
-    <tbody>${rows}</tbody>
-    <tfoot><tr class="font-bold bg-gray-50"><td colspan="2">TOTALS</td><td class="text-right">${fmt(totalDb)}</td><td class="text-right">${fmt(totalCr)}</td></tr></tfoot></table>
-    <p class="text-xs mt-2 ${Math.abs(totalDb-totalCr)<0.01?'text-green-600':'text-red-600'} font-semibold">${Math.abs(totalDb-totalCr)<0.01?'✓ Balanced':'⚠ Out of balance by '+fmt(Math.abs(totalDb-totalCr))}</p>`;
+  document.getElementById('report-content').innerHTML=
+    '<h2 class="font-display text-lg font-bold mb-1" style="color:#1a3c8f;">Trial Balance</h2>'+
+    '<p class="text-xs text-gray-500 mb-4">Period: '+from+' to '+to+'</p>'+
+    '<table class="tbl"><thead><tr><th>Code</th><th>Account</th><th class="text-right">Debit</th><th class="text-right">Credit</th></tr></thead>'+
+    '<tbody>'+(rows||'<tr><td colspan="4" class="text-center py-4 text-gray-400">No entries in period.</td></tr>')+'</tbody>'+
+    '<tfoot><tr class="font-bold bg-gray-50"><td colspan="2">TOTALS</td><td class="text-right">'+fmt(totalDb)+'</td><td class="text-right">'+fmt(totalCr)+'</td></tr></tfoot></table>'+
+    '<p class="text-xs mt-2 '+(Math.abs(totalDb-totalCr)<0.01?'text-green-600':'text-red-600')+' font-semibold">'+(Math.abs(totalDb-totalCr)<0.01?'&#10003; Balanced':'&#9888; Out of balance by '+fmt(Math.abs(totalDb-totalCr)))+'</p>';
 }
 
 async function genIncomeStatement(from,to) {
   const [journals,contribs]=await Promise.all([getPostedJournals(from,to),getPostedContribs(from,to)]);
   const bal=buildAccountBalances(journals,contribs);
-  const incomeAccts=coaCache.filter(a=>a.type==='Detail'&&a.category==='Income'&&bal[a.code]);
-  const expenseAccts=coaCache.filter(a=>a.type==='Detail'&&a.category==='Expense'&&bal[a.code]);
-  let totalIncome=0,totalExpense=0;
-  const incomeRows=incomeAccts.map(a=>{
-    const net=(bal[a.code].credit||0)-(bal[a.code].debit||0);
-    totalIncome+=net;
-    return `<tr><td>${a.code}</td><td>${a.name}</td><td class="text-right">${fmt(net)}</td></tr>`;
-  }).join('');
-  const expenseRows=expenseAccts.map(a=>{
-    const net=(bal[a.code].debit||0)-(bal[a.code].credit||0);
-    totalExpense+=net;
-    return `<tr><td>${a.code}</td><td>${a.name}</td><td class="text-right">${fmt(net)}</td></tr>`;
-  }).join('');
+
+  // Sum by code range directly — includes accounts not in COA (imported but unmatched)
+  let totalIncome=0, totalExpense=0;
+  let incomeRows='', expenseRows='';
+
+  Object.keys(bal).sort((a,b)=>(parseInt(a)||0)-(parseInt(b)||0)).forEach(code=>{
+    const n=parseInt(code)||0;
+    const b=bal[code];
+    const acct=coaCache.find(a=>a.code===code);
+    const name=acct?.name||code;
+    if(n>=4000&&n<=4999){
+      const net=Math.max(b.debit,b.credit);
+      if(net<0.005) return;
+      totalIncome+=net;
+      incomeRows+='<tr><td class="font-mono text-xs">'+code+'</td><td class="text-xs">'+name+'</td><td class="text-right text-xs">'+fmt(net)+'</td></tr>';
+    }
+    if(n>=5000&&n<=5999){
+      const net=Math.max(b.debit,b.credit);
+      if(net<0.005) return;
+      totalExpense+=net;
+      expenseRows+='<tr><td class="font-mono text-xs">'+code+'</td><td class="text-xs">'+name+'</td><td class="text-right text-xs">'+fmt(net)+'</td></tr>';
+    }
+  });
+
   const net=totalIncome-totalExpense;
-  document.getElementById('report-content').innerHTML=`
-    <h2 class="font-display text-lg font-bold mb-1" style="color:#1a3c8f;">Income Statement</h2>
-    <p class="text-xs text-gray-500 mb-4">Period: ${from} to ${to}</p>
-    <h3 class="font-bold mb-1 mt-3" style="color:#152f72;">INCOME</h3>
-    <table class="tbl mb-3"><thead><tr><th>Code</th><th>Account</th><th class="text-right">Amount</th></tr></thead><tbody>${incomeRows}</tbody>
-    <tfoot><tr class="font-bold bg-gray-50"><td colspan="2">Total Income</td><td class="text-right">${fmt(totalIncome)}</td></tr></tfoot></table>
-    <h3 class="font-bold mb-1" style="color:#152f72;">EXPENDITURE</h3>
-    <table class="tbl mb-3"><thead><tr><th>Code</th><th>Account</th><th class="text-right">Amount</th></tr></thead><tbody>${expenseRows}</tbody>
-    <tfoot><tr class="font-bold bg-gray-50"><td colspan="2">Total Expenditure</td><td class="text-right">${fmt(totalExpense)}</td></tr></tfoot></table>
-    <div class="flex justify-between items-center border-t-2 pt-2 mt-2" style="border-color:#1a3c8f;">
-      <span class="font-bold text-base">NET SURPLUS / (DEFICIT)</span>
-      <span class="font-bold text-xl ${net>=0?'text-green-700':'text-red-700'}">${net>=0?'':' ('}${fmt(Math.abs(net))}${net>=0?'':')'}</span>
-    </div>`;
+  const thead='<thead><tr><th>Code</th><th>Account</th><th class="text-right">Amount</th></tr></thead>';
+  document.getElementById('report-content').innerHTML=
+    '<h2 class="font-display text-lg font-bold mb-1" style="color:#1a3c8f;">Income &amp; Expense Statement</h2>'+
+    '<p class="text-xs text-gray-500 mb-4">Period: '+from+' to '+to+'</p>'+
+    '<h3 class="font-bold mb-1 mt-3" style="color:#152f72;">INCOME</h3>'+
+    '<table class="tbl mb-3">'+thead+'<tbody>'+(incomeRows||'<tr><td colspan="3" class="text-center text-gray-400 py-3 text-xs">No income entries</td></tr>')+'</tbody>'+
+    '<tfoot><tr class="font-bold bg-gray-50"><td colspan="2">Total Income</td><td class="text-right">'+fmt(totalIncome)+'</td></tr></tfoot></table>'+
+    '<h3 class="font-bold mb-1" style="color:#152f72;">EXPENDITURE</h3>'+
+    '<table class="tbl mb-3">'+thead+'<tbody>'+(expenseRows||'<tr><td colspan="3" class="text-center text-gray-400 py-3 text-xs">No expense entries</td></tr>')+'</tbody>'+
+    '<tfoot><tr class="font-bold bg-gray-50"><td colspan="2">Total Expenditure</td><td class="text-right">'+fmt(totalExpense)+'</td></tr></tfoot></table>'+
+    '<div class="flex justify-between items-center border-t-2 pt-3 mt-2" style="border-color:#1a3c8f;">'+
+    '<span class="font-bold text-base">NET SURPLUS / (DEFICIT)</span>'+
+    '<span class="font-bold text-xl '+(net>=0?'text-green-700':'text-red-700')+'">'+(net<0?'('+fmt(Math.abs(net))+')':fmt(net))+'</span>'+
+    '</div>';
 }
 
 async function genBalanceSheet(from,to) {
-  const [journals,contribs]=await Promise.all([getPostedJournals(from,to),getPostedContribs(from,to)]);
-  const bal=buildAccountBalances(journals,contribs);
-  const section=(cat,label,debitPositive)=>{
-    const accts=coaCache.filter(a=>a.type==='Detail'&&a.category===cat&&bal[a.code]);
-    let total=0;
-    const rows=accts.map(a=>{
-      const b=bal[a.code];
-      const net=debitPositive?(b.debit-b.credit):(b.credit-b.debit);
-      total+=net;
-      return `<tr><td class="pl-4">${a.code}</td><td class="pl-4">${a.name}</td><td class="text-right">${fmt(net)}</td></tr>`;
+  // Balance Sheet accounts (Asset/Liability/Fund Balance) accumulate from all time, not just the period.
+  // Income/Expense accounts also need all-time totals for current-year net.
+  const [allJnl, allCon] = await Promise.all([
+    getPostedJournals('2000-01-01', to),
+    getPostedContribs('2000-01-01', to)
+  ]);
+  const bal = buildAccountBalances(allJnl, allCon);
+
+  // Build a section by summing directly from bal by code range — includes accounts not in COA.
+  // Names come from COA cache where available, fall back to code itself.
+  const section = (codeFrom, codeTo, label, debitPositive) => {
+    const codes = Object.keys(bal)
+      .filter(c => { const n=parseInt(c)||0; return n>=codeFrom && n<=codeTo; })
+      .sort((a,b) => (parseInt(a)||0)-(parseInt(b)||0));
+    let total = 0;
+    const rows = codes.map(code => {
+      const b = bal[code];
+      const acct = coaCache.find(a=>a.code===code);
+      const name = acct?.name || code;
+      const net = debitPositive ? (b.debit - b.credit) : (b.credit - b.debit);
+      if (Math.abs(net) < 0.005) return ''; // skip zero-balance rows
+      total += net;
+      return '<tr>' +
+        '<td class="pl-4 font-mono text-xs">' + code + '</td>' +
+        '<td class="pl-4 text-xs">' + name + '</td>' +
+        '<td class="text-right text-xs">' + fmt(net) + '</td>' +
+        '</tr>';
     }).join('');
-    return {rows,total,label};
+    return { rows, total, label };
   };
-  const assets=section('Asset','ASSETS',true);
-  const liabilities=section('Liability','LIABILITIES',false);
-  const fundBal=section('Fund Balance','FUND BALANCE',false);
-  const [incJnl,incCon]=await Promise.all([getPostedJournals('2000-01-01',to),getPostedContribs('2000-01-01',to)]);
-  const allBal=buildAccountBalances(incJnl,incCon);
-  let retainedIncome=0,retainedExpense=0;
-  coaCache.filter(a=>a.type==='Detail'&&a.category==='Income'&&allBal[a.code]).forEach(a=>{ retainedIncome+=(allBal[a.code].credit-allBal[a.code].debit); });
-  coaCache.filter(a=>a.type==='Detail'&&a.category==='Expense'&&allBal[a.code]).forEach(a=>{ retainedExpense+=(allBal[a.code].debit-allBal[a.code].credit); });
-  const currentNet=retainedIncome-retainedExpense;
-  const totalEquity=liabilities.total+fundBal.total+currentNet;
-  document.getElementById('report-content').innerHTML=`
-    <h2 class="font-display text-lg font-bold mb-1" style="color:#1a3c8f;">Balance Sheet</h2>
-    <p class="text-xs text-gray-500 mb-4">As at ${to}</p>
-    <div class="grid md:grid-cols-2 gap-6">
-      <div>
-        <h3 class="font-bold mb-1" style="color:#152f72;">ASSETS</h3>
-        <table class="tbl mb-2"><thead><tr><th>Code</th><th>Account</th><th class="text-right">Amount</th></tr></thead><tbody>${assets.rows}</tbody>
-        <tfoot><tr class="font-bold bg-gray-50"><td colspan="2">Total Assets</td><td class="text-right">${fmt(assets.total)}</td></tr></tfoot></table>
-      </div>
-      <div>
-        <h3 class="font-bold mb-1" style="color:#152f72;">LIABILITIES</h3>
-        <table class="tbl mb-2"><thead><tr><th>Code</th><th>Account</th><th class="text-right">Amount</th></tr></thead><tbody>${liabilities.rows}</tbody>
-        <tfoot><tr class="font-bold bg-gray-50"><td colspan="2">Total Liabilities</td><td class="text-right">${fmt(liabilities.total)}</td></tr></tfoot></table>
-        <h3 class="font-bold mb-1 mt-3" style="color:#152f72;">FUND BALANCE</h3>
-        <table class="tbl mb-2"><thead><tr><th>Code</th><th>Account</th><th class="text-right">Amount</th></tr></thead><tbody>${fundBal.rows}
-          <tr><td class="pl-4">—</td><td class="pl-4">Current Year Surplus/(Deficit)</td><td class="text-right">${fmt(currentNet)}</td></tr>
-        </tbody><tfoot><tr class="font-bold bg-gray-50"><td colspan="2">Total Equity</td><td class="text-right">${fmt(totalEquity)}</td></tr></tfoot></table>
-        <p class="text-xs mt-2 ${Math.abs(assets.total-totalEquity)<1?'text-green-600':'text-red-600'} font-semibold">${Math.abs(assets.total-totalEquity)<1?'✓ Balanced':'⚠ Difference: '+fmt(Math.abs(assets.total-totalEquity))}</p>
-      </div>
-    </div>`;
+
+  const assets      = section(1000, 1999, 'ASSETS',        true);
+  const liabilities = section(2000, 2999, 'LIABILITIES',   false);
+  const fundBal     = section(3000, 3999, 'FUND BALANCE',  false);
+
+  // Current Year surplus — sum income (4xxx) and expense (5xxx) by code range
+  let retainedIncome = 0, retainedExpense = 0;
+  Object.keys(bal).forEach(code => {
+    const n = parseInt(code)||0;
+    const b = bal[code];
+    if (n>=4000 && n<=4999) retainedIncome  += Math.max(b.debit, b.credit);
+    if (n>=5000 && n<=5999) retainedExpense += Math.max(b.debit, b.credit);
+  });
+  const currentNet  = retainedIncome - retainedExpense;
+  const totalEquity = liabilities.total + fundBal.total + currentNet;
+  const balanced    = Math.abs(assets.total - totalEquity) < 1;
+
+  const thead = '<thead><tr><th>Code</th><th>Account</th><th class="text-right">Amount</th></tr></thead>';
+  document.getElementById('report-content').innerHTML =
+    '<h2 class="font-display text-lg font-bold mb-1" style="color:#1a3c8f;">Balance Sheet</h2>' +
+    '<p class="text-xs text-gray-500 mb-4">As at ' + to + ' &nbsp;|&nbsp; Church of Pentecost Canada Inc — General Fund</p>' +
+    '<div class="grid md:grid-cols-2 gap-6">' +
+    '<div>' +
+    '<h3 class="font-bold mb-1" style="color:#152f72;">ASSETS</h3>' +
+    '<table class="tbl mb-2">' + thead + '<tbody>' + (assets.rows||'<tr><td colspan="3" class="text-center text-gray-400 py-3 text-xs">No asset entries</td></tr>') + '</tbody>' +
+    '<tfoot><tr class="font-bold bg-gray-50"><td colspan="2">Total Assets</td><td class="text-right">' + fmt(assets.total) + '</td></tr></tfoot></table>' +
+    '</div>' +
+    '<div>' +
+    '<h3 class="font-bold mb-1" style="color:#152f72;">LIABILITIES</h3>' +
+    '<table class="tbl mb-2">' + thead + '<tbody>' + (liabilities.rows||'<tr><td colspan="3" class="text-center text-gray-400 py-3 text-xs">No liability entries</td></tr>') + '</tbody>' +
+    '<tfoot><tr class="font-bold bg-gray-50"><td colspan="2">Total Liabilities</td><td class="text-right">' + fmt(liabilities.total) + '</td></tr></tfoot></table>' +
+    '<h3 class="font-bold mb-1 mt-4" style="color:#152f72;">FUND BALANCE</h3>' +
+    '<table class="tbl mb-2">' + thead + '<tbody>' + (fundBal.rows||'') +
+    '<tr><td class="pl-4 font-mono text-xs">—</td><td class="pl-4 text-xs">Current Year Surplus / (Deficit)</td><td class="text-right text-xs ' + (currentNet<0?'text-red-600':'') + '">' + (currentNet<0?'('+fmt(Math.abs(currentNet))+')':fmt(currentNet)) + '</td></tr>' +
+    '</tbody>' +
+    '<tfoot><tr class="font-bold bg-gray-50"><td colspan="2">Total Fund Balance &amp; Liabilities</td><td class="text-right">' + fmt(totalEquity) + '</td></tr></tfoot></table>' +
+    '<p class="text-xs mt-2 font-semibold ' + (balanced?'text-green-600':'text-red-600') + '">' +
+    (balanced ? '&#10003; Balanced' : '&#9888; Difference: ' + fmt(Math.abs(assets.total-totalEquity))) +
+    '</p>' +
+    '</div>' +
+    '</div>';
 }
 
 async function genContribDistribution(from,to) {
