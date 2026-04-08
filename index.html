@@ -3141,6 +3141,7 @@ async function finalizeReconciliation() {
 // ══════════════════════════════════════════════
 let activeReport=null;
 let _isReportCache = null;  // stores last IS data for clean PDF export
+let _bsReportCache = null; // stores last BS data for clean PDF export
 
 function runReport(type) {
   activeReport=type;
@@ -3388,13 +3389,14 @@ async function genBalanceSheet(from,to) {
     const codes = Object.keys(bal)
       .filter(c => { const n=parseInt(c)||0; return n>=codeFrom && n<=codeTo; })
       .sort((a,b)=>(parseInt(a)||0)-(parseInt(b)||0));
-    let total = 0, rows = '';
+    let total = 0, rows = '', items = [];
     codes.forEach(code => {
       const b = bal[code];
       const name = coaCache.find(a=>a.code===code)?.name || code;
       const net  = debitPositive ? (b.debit-b.credit) : (b.credit-b.debit);
       if (Math.abs(net) < 0.005) return;
       total += net;
+      items.push({ code, name, net });
       rows +=
         '<tr>' +
         '<td style="padding:4px 8px;font-family:monospace;font-size:12px;color:#374151;">' + code + '</td>' +
@@ -3402,7 +3404,7 @@ async function genBalanceSheet(from,to) {
         '<td style="padding:4px 8px;text-align:right;font-size:13px;">' + fmt(net) + '</td>' +
         '</tr>';
     });
-    return { rows, total };
+    return { rows, total, items };
   };
 
   const assets      = section(balAll,  1000, 1999, true);
@@ -3465,6 +3467,9 @@ async function genBalanceSheet(from,to) {
     totalRow('Total Fund Balance', fundBal.total + currentNet, false) +
     totalRow('Total Liabilities & Fund Balance', totalEquity, true) +
     '</tbody></table>';
+
+  // Cache structured data for clean PDF export
+  _bsReportCache = { to, assets, liabilities, fundBal, currentNet, totalEquity, balanced };
 
   document.getElementById('report-content').innerHTML =
     // Report header — Power Church style
@@ -4252,6 +4257,78 @@ function exportReportPDF() {
       margin: { left: 14, right: 14 },
     });
     y = doc.lastAutoTable.finalY + 8;
+  } else if (activeReport === 'balance-sheet' && _bsReportCache) {
+    const bs = _bsReportCache;
+    const asOf = new Date(bs.to).toLocaleDateString('en-CA',{year:'numeric',month:'long',day:'numeric'});
+
+    // Helper to build a section's body rows
+    const bsSecRow = label => [{ content: label, colSpan: 3, styles: { fillColor: [220,229,247], textColor: [26,60,143], fontStyle: 'bold', fontSize: 9, cellPadding: 3 } }];
+    const bsTotRow = (label, amt, bold) => [
+      { content: '', styles: { cellWidth: 16 } },
+      { content: label, styles: { fontStyle: bold?'bold':'normal', fontSize: bold?9.5:9, textColor: [26,60,143], fillColor: [200,216,240] } },
+      { content: fmt(amt), styles: { halign: 'right', fontStyle: bold?'bold':'normal', fontSize: bold?9.5:9, textColor: [26,60,143], fillColor: [200,216,240] } },
+    ];
+
+    const head = [['Code', 'Account Description', 'Amount ($)']];
+    const colStyles = {
+      0: { cellWidth: 16, halign: 'left' },
+      1: { cellWidth: 'auto' },
+      2: { cellWidth: 44, halign: 'right' },
+    };
+
+    // ── ASSETS TABLE ──
+    const assetsBody = [];
+    assetsBody.push(bsSecRow('ASSETS'));
+    bs.assets.items.forEach(item => assetsBody.push([
+      item.code,
+      item.name,
+      { content: fmt(item.net), styles: { halign: 'right' } },
+    ]));
+    assetsBody.push(bsTotRow('Total Assets', bs.assets.total, true));
+
+    doc.autoTable({ head, body: assetsBody, startY: y, theme: 'striped',
+      headStyles: { fillColor: [26,60,143], textColor: [255,255,255], fontStyle: 'bold', fontSize: 9 },
+      bodyStyles: { fontSize: 8.5 }, columnStyles: colStyles, margin: { left: 14, right: 14 } });
+    y = doc.lastAutoTable.finalY + 6;
+
+    // ── LIABILITIES + FUND BALANCE TABLE ──
+    const equityBody = [];
+    equityBody.push(bsSecRow('LIABILITIES'));
+    bs.liabilities.items.forEach(item => equityBody.push([
+      item.code,
+      item.name,
+      { content: fmt(item.net), styles: { halign: 'right' } },
+    ]));
+    equityBody.push(bsTotRow('Total Liabilities', bs.liabilities.total, false));
+
+    equityBody.push(bsSecRow('FUND BALANCE'));
+    bs.fundBal.items.forEach(item => equityBody.push([
+      item.code,
+      item.name,
+      { content: fmt(item.net), styles: { halign: 'right' } },
+    ]));
+    if (Math.abs(bs.currentNet) > 0.005) {
+      equityBody.push([
+        '—',
+        { content: 'Current Year Surplus / (Deficit)', styles: { fontStyle: 'italic' } },
+        { content: bs.currentNet<0?'('+fmt(Math.abs(bs.currentNet))+')':fmt(bs.currentNet), styles: { halign: 'right', textColor: bs.currentNet<0?[220,38,38]:[0,0,0] } },
+      ]);
+    }
+    equityBody.push(bsTotRow('Total Fund Balance', bs.fundBal.total + bs.currentNet, false));
+    equityBody.push(bsTotRow('Total Liabilities & Fund Balance', bs.totalEquity, true));
+
+    doc.autoTable({ head, body: equityBody, startY: y, theme: 'striped',
+      headStyles: { fillColor: [26,60,143], textColor: [255,255,255], fontStyle: 'bold', fontSize: 9 },
+      bodyStyles: { fontSize: 8.5 }, columnStyles: colStyles, margin: { left: 14, right: 14 } });
+    y = doc.lastAutoTable.finalY + 6;
+
+    // Balance footer
+    if (bs.balanced) {
+      doc.setFillColor(240,253,244); doc.rect(14, y, pageW-28, 10, 'F');
+      doc.setFontSize(9); doc.setFont('helvetica','bold'); doc.setTextColor(21,128,61);
+      doc.text('✓  Balance Sheet is Balanced — Total Assets: ' + fmt(bs.assets.total) + '  |  Total Liabilities & Fund Balance: ' + fmt(bs.totalEquity), 18, y+6.5);
+      y += 14;
+    }
   } else {
     const tables=document.querySelectorAll('#report-content table');
     tables.forEach(tbl=>{
