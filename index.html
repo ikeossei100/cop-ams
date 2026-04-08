@@ -3142,92 +3142,120 @@ async function genTrialBalance(from,to) {
 }
 
 async function genIncomeStatement(from,to) {
-  const [journals,contribs]=await Promise.all([getPostedJournals(from,to),getPostedContribs(from,to)]);
-  const bal=buildAccountBalances(journals,contribs);
+  // YTD: Jan 1 of the year containing 'from' through 'to'
+  const ytdFrom = from.slice(0,4) + '-01-01';
+  const isFullYear = (from === ytdFrom);  // if period already starts Jan 1, YTD col = period col
 
-  // Sum by code range directly — includes accounts not in COA (imported but unmatched)
-  let totalIncome=0, totalExpense=0;
+  const [jnlPeriod, conPeriod, jnlYtd, conYtd] = await Promise.all([
+    getPostedJournals(from, to),
+    getPostedContribs(from, to),
+    isFullYear ? Promise.resolve(null) : getPostedJournals(ytdFrom, to),
+    isFullYear ? Promise.resolve(null) : getPostedContribs(ytdFrom, to),
+  ]);
+
+  const balP = buildAccountBalances(jnlPeriod, conPeriod);
+  const balY = isFullYear ? balP : buildAccountBalances(jnlYtd, conYtd);
+
+  // Collect all relevant account codes across both periods
+  const allCodes = [...new Set([...Object.keys(balP), ...Object.keys(balY)])]
+    .filter(c => { const n=parseInt(c)||0; return (n>=4000&&n<=4999)||(n>=5000&&n<=5999); })
+    .sort((a,b)=>(parseInt(a)||0)-(parseInt(b)||0));
+
+  let totInP=0, totExpP=0, totInY=0, totExpY=0;
   let incomeRows='', expenseRows='';
 
-  Object.keys(bal).sort((a,b)=>(parseInt(a)||0)-(parseInt(b)||0)).forEach(code=>{
-    const n=parseInt(code)||0;
-    const b=bal[code];
-    const acct=coaCache.find(a=>a.code===code);
-    const name=acct?.name||code;
-    if(n>=4000&&n<=4999){
-      const net=Math.max(b.debit,b.credit);
-      if(net<0.005) return;
-      totalIncome+=net;
-      incomeRows+=
-        '<tr style="border-bottom:1px solid #f3f4f6;">' +
-        '<td style="padding:4px 8px;font-family:monospace;font-size:12px;color:#374151;">' + code + '</td>' +
-        '<td style="padding:4px 8px;font-size:13px;">' + name + '</td>' +
-        '<td style="padding:4px 8px;text-align:right;font-size:13px;">' + fmt(net) + '</td>' +
-        '</tr>';
-    }
-    if(n>=5000&&n<=5999){
-      const net=Math.max(b.debit,b.credit);
-      if(net<0.005) return;
-      totalExpense+=net;
-      expenseRows+=
-        '<tr style="border-bottom:1px solid #f3f4f6;">' +
-        '<td style="padding:4px 8px;font-family:monospace;font-size:12px;color:#374151;">' + code + '</td>' +
-        '<td style="padding:4px 8px;font-size:13px;">' + name + '</td>' +
-        '<td style="padding:4px 8px;text-align:right;font-size:13px;">' + fmt(net) + '</td>' +
-        '</tr>';
-    }
+  allCodes.forEach(code => {
+    const n = parseInt(code)||0;
+    const bp = balP[code]||{debit:0,credit:0};
+    const by = balY[code]||{debit:0,credit:0};
+    const netP = Math.max(bp.debit, bp.credit);
+    const netY = Math.max(by.debit, by.credit);
+    if (netP < 0.005 && netY < 0.005) return;
+    const acct = coaCache.find(a=>a.code===code);
+    const name = acct?.name || code;
+    const tdCode = '<td style="padding:4px 8px;font-family:monospace;font-size:12px;color:#374151;">' + code + '</td>';
+    const tdName = '<td style="padding:4px 8px;font-size:13px;">' + name + '</td>';
+    const tdP    = '<td style="padding:4px 8px;text-align:right;font-size:13px;">' + (netP>=0.005?fmt(netP):'—') + '</td>';
+    const tdY    = '<td style="padding:4px 8px;text-align:right;font-size:13px;background:#f8faff;">' + (netY>=0.005?fmt(netY):'—') + '</td>';
+    const row    = '<tr style="border-bottom:1px solid #f3f4f6;">' + tdCode + tdName + tdP + tdY + '</tr>';
+    if (n>=4000&&n<=4999) { totInP+=netP; totInY+=netY; incomeRows+=row; }
+    if (n>=5000&&n<=5999) { totExpP+=netP; totExpY+=netY; expenseRows+=row; }
   });
 
-  const net = totalIncome - totalExpense;
-  const fromFmt = new Date(from).toLocaleDateString('en-CA',{year:'numeric',month:'long',day:'numeric'});
-  const toFmt   = new Date(to).toLocaleDateString('en-CA',{year:'numeric',month:'long',day:'numeric'});
-  const printed = new Date().toLocaleDateString('en-CA',{year:'numeric',month:'long',day:'numeric'});
+  const netP = totInP - totExpP;
+  const netY = totInY - totExpY;
+  const fromFmt  = new Date(from).toLocaleDateString('en-CA',{year:'numeric',month:'long',day:'numeric'});
+  const toFmt    = new Date(to).toLocaleDateString('en-CA',{year:'numeric',month:'long',day:'numeric'});
+  const ytdFmt   = new Date(ytdFrom).toLocaleDateString('en-CA',{year:'numeric',month:'long',day:'numeric'});
+  const printed  = new Date().toLocaleDateString('en-CA',{year:'numeric',month:'long',day:'numeric'});
 
   const tblStyle = 'width:100%;border-collapse:collapse;';
-  const thStyle  = 'background:#1a3c8f;color:white;padding:6px 8px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;text-align:left;';
-  const thRStyle = thStyle+'text-align:right;';
-  const secHdr   = (label) =>
-    '<tr><td colspan="3" style="background:#e8edf7;padding:5px 8px;font-weight:700;font-size:12px;color:#1a3c8f;letter-spacing:.04em;text-transform:uppercase;border-top:2px solid #1a3c8f;">' + label + '</td></tr>';
-  const totalRow = (label, amt, bold, color) =>
+  const thBase   = 'padding:6px 8px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;';
+  const thL      = 'background:#1a3c8f;color:white;text-align:left;' + thBase;
+  const thR      = 'background:#1a3c8f;color:white;text-align:right;' + thBase;
+  const thRytd   = 'background:#152f72;color:#bfdbfe;text-align:right;' + thBase;  // slightly darker for YTD
+
+  const secHdr = (label) =>
+    '<tr><td colspan="4" style="background:#e8edf7;padding:5px 8px;font-weight:700;font-size:12px;color:#1a3c8f;letter-spacing:.04em;text-transform:uppercase;border-top:2px solid #1a3c8f;">' + label + '</td></tr>';
+
+  const totalRow = (label, amtP, amtY) =>
     '<tr style="background:#f1f5fd;">' +
-    '<td colspan="2" style="padding:5px 8px;font-weight:' + (bold?'700':'600') + ';font-size:' + (bold?'13':'12') + 'px;color:' + (color||'#1a3c8f') + ';">' + label + '</td>' +
-    '<td style="padding:5px 8px;text-align:right;font-weight:' + (bold?'700':'600') + ';font-size:' + (bold?'13':'12') + 'px;color:' + (color||'#1a3c8f') + ';border-top:1px solid #93c5fd;">' + fmt(amt) + '</td>' +
+    '<td colspan="2" style="padding:5px 8px;font-weight:600;font-size:12px;color:#1a3c8f;">' + label + '</td>' +
+    '<td style="padding:5px 8px;text-align:right;font-weight:700;font-size:13px;color:#1a3c8f;border-top:1px solid #93c5fd;">' + fmt(amtP) + '</td>' +
+    '<td style="padding:5px 8px;text-align:right;font-weight:700;font-size:13px;color:#1a3c8f;border-top:1px solid #93c5fd;background:#f0f4ff;">' + fmt(amtY) + '</td>' +
     '</tr>';
-  const noEntries = '<tr><td colspan="3" style="padding:8px;color:#9ca3af;font-size:12px;font-style:italic;">No entries in this period</td></tr>';
+
+  const noEntries = '<tr><td colspan="4" style="padding:8px;color:#9ca3af;font-size:12px;font-style:italic;">No entries</td></tr>';
+
+  const surplusRow = (amtP, amtY) => {
+    const cP = amtP>=0?'#15803d':'#dc2626', cY = amtY>=0?'#15803d':'#dc2626';
+    const fP = amtP<0?'('+fmt(Math.abs(amtP))+')':fmt(amtP);
+    const fY = amtY<0?'('+fmt(Math.abs(amtY))+')':fmt(amtY);
+    return '<tr style="background:#1a3c8f;">' +
+      '<td colspan="2" style="padding:7px 8px;font-weight:700;font-size:13px;color:white;">NET SURPLUS / (DEFICIT)</td>' +
+      '<td style="padding:7px 8px;text-align:right;font-weight:700;font-size:14px;color:' + (amtP>=0?'#bbf7d0':'#fca5a5') + ';">' + fP + '</td>' +
+      '<td style="padding:7px 8px;text-align:right;font-weight:700;font-size:14px;color:' + (amtY>=0?'#bbf7d0':'#fca5a5') + ';background:#152f72;">' + fY + '</td>' +
+      '</tr>';
+  };
+
+  const colLabel1 = isFullYear ? 'Year (' + from.slice(0,4) + ')' : 'Current Period';
+  const colLabel2 = isFullYear ? 'Year (' + from.slice(0,4) + ')' : 'Year to Date';
 
   const isTable =
     '<table style="' + tblStyle + '">' +
-    '<thead><tr><th style="' + thStyle + '">Code</th><th style="' + thStyle + '">Account Description</th><th style="' + thRStyle + '">Amount ($)</th></tr></thead>' +
+    '<thead>' +
+    '<tr>' +
+    '<th style="' + thL + '" colspan="2">Account</th>' +
+    '<th style="' + thR + '">' + colLabel1 + '</th>' +
+    '<th style="' + thRytd + '">' + colLabel2 + '</th>' +
+    '</tr>' +
+    '<tr style="background:#1e40af;">' +
+    '<th style="padding:3px 8px;color:#93c5fd;font-size:10px;font-weight:400;">Code</th>' +
+    '<th style="padding:3px 8px;color:#93c5fd;font-size:10px;font-weight:400;">Description</th>' +
+    '<th style="padding:3px 8px;color:#93c5fd;font-size:10px;font-weight:400;text-align:right;">' + fromFmt + ' – ' + toFmt + '</th>' +
+    '<th style="padding:3px 8px;color:#bfdbfe;font-size:10px;font-weight:400;text-align:right;background:#152f72;">' + ytdFmt + ' – ' + toFmt + '</th>' +
+    '</tr>' +
+    '</thead>' +
     '<tbody>' +
     secHdr('Income') +
     (incomeRows || noEntries) +
-    totalRow('Total Income', totalIncome, false) +
+    totalRow('Total Income', totInP, totInY) +
     secHdr('Expenditure') +
     (expenseRows || noEntries) +
-    totalRow('Total Expenditure', totalExpense, false) +
+    totalRow('Total Expenditure', totExpP, totExpY) +
+    surplusRow(netP, netY) +
     '</tbody></table>';
 
-  const surplusColor = net >= 0 ? '#15803d' : '#dc2626';
-  const surplusLabel = net >= 0 ? 'Net Surplus' : 'Net Deficit';
-  const surplusFmt   = net < 0 ? '(' + fmt(Math.abs(net)) + ')' : fmt(net);
-
   document.getElementById('report-content').innerHTML =
-    // Report header — Power Church style
     '<div style="border-bottom:3px solid #1a3c8f;padding-bottom:10px;margin-bottom:18px;">' +
     '<div style="font-family:\'Playfair Display\',serif;font-size:20px;font-weight:700;color:#1a3c8f;">Church of Pentecost Canada Inc</div>' +
     '<div style="font-size:15px;font-weight:700;color:#374151;margin-top:2px;">Income &amp; Expense Statement</div>' +
     '<div style="display:flex;justify-content:space-between;margin-top:4px;">' +
-    '<span style="font-size:12px;color:#6b7280;">Period: ' + fromFmt + ' to ' + toFmt + ' &nbsp;|&nbsp; Fund 01 — General Fund</span>' +
+    '<span style="font-size:12px;color:#6b7280;">Fund 01 — General Fund</span>' +
     '<span style="font-size:11px;color:#9ca3af;">Printed: ' + printed + '</span>' +
     '</div>' +
     '</div>' +
-    // Main table
-    isTable +
-    // Net surplus/deficit footer
-    '<div style="margin-top:16px;padding:10px 14px;border-radius:8px;background:' + (net>=0?'#f0fdf4':'#fef2f2') + ';border:1.5px solid ' + (net>=0?'#86efac':'#fca5a5') + ';display:flex;justify-content:space-between;align-items:center;">' +
-    '<span style="font-weight:700;font-size:14px;color:' + surplusColor + ';">' + surplusLabel + '</span>' +
-    '<span style="font-weight:700;font-size:18px;color:' + surplusColor + ';">' + surplusFmt + '</span>' +
-    '</div>';
+    isTable;
 }
 
 async function genBalanceSheet(from,to) {
