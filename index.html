@@ -768,6 +768,11 @@ tailwind.config = {
       <div class="font-semibold text-sm text-gray-700">Contributor Statement</div>
       <div class="text-xs text-gray-400 mt-1">Individual giving statement</div>
     </div>
+    <div class="card p-4 cursor-pointer hover:border-[#1a3c8f] hover:border transition-colors" onclick="runReport('journal-report')" style="border:2px solid transparent;">
+      <div class="text-2xl mb-1">📓</div>
+      <div class="font-semibold text-sm text-gray-700">Journal Report</div>
+      <div class="text-xs text-gray-400 mt-1">All journal entries by date</div>
+    </div>
   </div>
 
   <!-- Report filters -->
@@ -3184,6 +3189,7 @@ async function generateReport() {
     else if(activeReport==='general-ledger') await genGeneralLedger(from,to);
     else if(activeReport==='cash-flow') await genCashFlow(from,to);
     else if(activeReport==='contributor-statement') await genContributorStatement(from,to);
+    else if(activeReport==='journal-report') await genJournalReport(from,to);
   } catch(e){ content.innerHTML=`<p class="text-red-600">Error: ${e.message}</p>`; }
 }
 
@@ -4099,6 +4105,139 @@ async function genCashFlow(from,to) {
     <tbody>${rowsHTML||'<tr><td colspan="4" class="text-center py-4 text-gray-400">No cash transactions in period.</td></tr>'}</tbody></table>`;
 }
 
+async function genJournalReport(from, to) {
+  const [journals, contribs] = await Promise.all([
+    getPostedJournals(from, to),
+    getPostedContribs(from, to),
+  ]);
+
+  // Sort journals by date then by ref_no
+  const sorted = [...journals].sort((a, b) => {
+    const d = a.date.localeCompare(b.date);
+    return d !== 0 ? d : (a.ref_no||'').localeCompare(b.ref_no||'');
+  });
+
+  const fmtDate = d => new Date(d+'T00:00:00').toLocaleDateString('en-CA', {year:'numeric',month:'short',day:'numeric'});
+  const fromFmt = fmtDate(from), toFmt = fmtDate(to);
+  const printed = new Date().toLocaleString('en-CA');
+
+  let grandDb = 0, grandCr = 0;
+  let entriesHtml = '';
+
+  sorted.forEach(j => {
+    const lines = j.lines || [];
+    let entryDb = 0, entryCr = 0;
+    lines.forEach(l => {
+      const amt = parseFloat(l.amount)||0;
+      if (l.dc==='DB') entryDb += amt; else entryCr += amt;
+    });
+    grandDb += entryDb; grandCr += entryCr;
+
+    const typeLabel = { JE:'General Journal', AP:'Accounts Payable', AR:'Accounts Receivable', CR:'Cash Receipt', CD:'Cash Disbursement', BR:'Bank Rec' }[j.type||'JE'] || j.type || 'General Journal';
+
+    // Entry header row
+    entriesHtml +=
+      '<tr style="background:#dce5f5;border-top:2px solid #1a3c8f;">' +
+      '<td colspan="6" style="padding:5px 10px;font-size:12px;font-weight:700;color:#1a3c8f;">' +
+        '<span style="font-family:monospace;margin-right:12px;">' + (j.ref_no||'—') + '</span>' +
+        '<span style="margin-right:12px;">' + fmtDate(j.date) + '</span>' +
+        '<span style="font-weight:600;color:#374151;">' + (j.description||'') + '</span>' +
+        '<span style="float:right;font-size:11px;font-weight:500;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;">' + typeLabel + '</span>' +
+      '</td>' +
+      '</tr>';
+
+    // Detail lines — debits first, then credits
+    const dbLines = lines.filter(l => l.dc==='DB');
+    const crLines = lines.filter(l => l.dc==='CR');
+    [...dbLines, ...crLines].forEach((l, idx) => {
+      const acct = coaCache.find(a => a.code === l.account_code);
+      const acctName = acct?.name || l.account_code || '';
+      const amt = parseFloat(l.amount)||0;
+      const isDb = l.dc === 'DB';
+      const bg = idx % 2 === 0 ? 'white' : '#f9fafb';
+      entriesHtml +=
+        '<tr style="background:' + bg + ';border-bottom:1px solid #f0f0f0;">' +
+        '<td style="padding:3px 10px;font-family:monospace;font-size:12px;color:#374151;width:70px;">' + (l.account_code||'') + '</td>' +
+        '<td style="padding:3px 10px;font-size:12px;">' + acctName + '</td>' +
+        '<td style="padding:3px 10px;font-size:11px;color:#6b7280;">' + (l.description||j.description||'') + '</td>' +
+        '<td style="padding:3px 10px;font-size:11px;color:#374151;text-align:center;">' + (isDb ? 'DB' : '') + '</td>' +
+        '<td style="padding:3px 10px;text-align:right;font-size:12px;color:#1e40af;">' + (isDb ? fmt(amt) : '') + '</td>' +
+        '<td style="padding:3px 10px;text-align:right;font-size:12px;color:#15803d;">' + (!isDb ? fmt(amt) : '') + '</td>' +
+        '</tr>';
+    });
+
+    // Entry subtotal
+    const balanced = Math.abs(entryDb - entryCr) < 0.01;
+    entriesHtml +=
+      '<tr style="background:#f1f5fd;border-top:1px solid #bfdbfe;">' +
+      '<td colspan="3" style="padding:4px 10px;font-size:11px;font-style:italic;color:#6b7280;">Entry Total — ' + lines.length + ' line(s)</td>' +
+      '<td style="padding:4px 10px;text-align:center;font-size:11px;color:' + (balanced?'#15803d':'#dc2626') + ';">' + (balanced?'✓':'⚠') + '</td>' +
+      '<td style="padding:4px 10px;text-align:right;font-size:12px;font-weight:700;color:#1e40af;">' + fmt(entryDb) + '</td>' +
+      '<td style="padding:4px 10px;text-align:right;font-size:12px;font-weight:700;color:#15803d;">' + fmt(entryCr) + '</td>' +
+      '</tr>';
+  });
+
+  // If no journal entries — also show contributions as single-line entries
+  if (!sorted.length && contribs.length) {
+    contribs.forEach(c => {
+      const acct = coaCache.find(a => a.code === c.account_code);
+      grandCr += parseFloat(c.amount)||0;
+      entriesHtml +=
+        '<tr style="background:#dce5f5;border-top:2px solid #1a3c8f;">' +
+        '<td colspan="6" style="padding:5px 10px;font-size:12px;font-weight:700;color:#1a3c8f;">' +
+          '<span style="font-family:monospace;margin-right:12px;">' + (c.ref_no||'—') + '</span>' +
+          '<span style="margin-right:12px;">' + fmtDate(c.date) + '</span>' +
+          '<span>Contribution</span>' +
+        '</td></tr>' +
+        '<tr style="background:white;">' +
+        '<td style="padding:3px 10px;font-family:monospace;font-size:12px;">' + (c.account_code||'') + '</td>' +
+        '<td style="padding:3px 10px;font-size:12px;">' + (acct?.name||c.account_code||'') + '</td>' +
+        '<td style="padding:3px 10px;font-size:11px;color:#6b7280;">' + (c.description||'') + '</td>' +
+        '<td style="padding:3px 10px;text-align:center;font-size:11px;">CR</td>' +
+        '<td></td>' +
+        '<td style="padding:3px 10px;text-align:right;font-size:12px;color:#15803d;">' + fmt(parseFloat(c.amount)||0) + '</td>' +
+        '</tr>';
+    });
+  }
+
+  const noEntries = !sorted.length && !contribs.length;
+  const grandBalanced = Math.abs(grandDb - grandCr) < 0.01;
+
+  document.getElementById('report-content').innerHTML =
+    // ── Report Header ──
+    '<div style="border-bottom:3px solid #1a3c8f;padding-bottom:10px;margin-bottom:16px;">' +
+      '<div style="font-family:\'Playfair Display\',serif;font-size:20px;font-weight:700;color:#1a3c8f;">Church of Pentecost Canada Inc</div>' +
+      '<div style="font-size:15px;font-weight:700;color:#374151;margin-top:2px;">Journal Report</div>' +
+      '<div style="display:flex;justify-content:space-between;margin-top:4px;">' +
+        '<span style="font-size:12px;color:#6b7280;">Period: ' + fromFmt + ' to ' + toFmt + ' &nbsp;|&nbsp; Fund 01 — General Fund &nbsp;|&nbsp; All Journals</span>' +
+        '<span style="font-size:11px;color:#9ca3af;">Printed: ' + printed + '</span>' +
+      '</div>' +
+    '</div>' +
+    // ── Main Table ──
+    '<div class="overflow-x-auto">' +
+    '<table style="width:100%;border-collapse:collapse;font-size:13px;" id="journal-report-table">' +
+    '<thead>' +
+      '<tr style="background:#1a3c8f;">' +
+        '<th style="padding:6px 10px;color:white;font-size:11px;font-weight:700;text-align:left;text-transform:uppercase;letter-spacing:.05em;width:70px;">Acct #</th>' +
+        '<th style="padding:6px 10px;color:white;font-size:11px;font-weight:700;text-align:left;text-transform:uppercase;letter-spacing:.05em;">Account Name</th>' +
+        '<th style="padding:6px 10px;color:white;font-size:11px;font-weight:700;text-align:left;text-transform:uppercase;letter-spacing:.05em;">Memo / Description</th>' +
+        '<th style="padding:6px 10px;color:white;font-size:11px;font-weight:700;text-align:center;text-transform:uppercase;letter-spacing:.05em;width:40px;">DC</th>' +
+        '<th style="padding:6px 10px;color:white;font-size:11px;font-weight:700;text-align:right;text-transform:uppercase;letter-spacing:.05em;width:110px;">Debit ($)</th>' +
+        '<th style="padding:6px 10px;color:white;font-size:11px;font-weight:700;text-align:right;text-transform:uppercase;letter-spacing:.05em;width:110px;">Credit ($)</th>' +
+      '</tr>' +
+    '</thead>' +
+    '<tbody>' +
+    (noEntries ? '<tr><td colspan="6" style="padding:24px;text-align:center;color:#9ca3af;font-style:italic;">No posted journal entries in this period.</td></tr>' : entriesHtml) +
+    // Grand total row
+    '<tr style="background:#1a3c8f;border-top:2px solid #152f72;">' +
+      '<td colspan="3" style="padding:7px 10px;font-weight:700;font-size:13px;color:white;">GRAND TOTAL — ' + sorted.length + ' journal entr' + (sorted.length===1?'y':'ies') + '</td>' +
+      '<td style="padding:7px 10px;text-align:center;font-size:13px;color:' + (grandBalanced?'#bbf7d0':'#fca5a5') + ';font-weight:700;">' + (grandBalanced?'✓':'⚠') + '</td>' +
+      '<td style="padding:7px 10px;text-align:right;font-weight:800;font-size:14px;color:#bfdbfe;">' + fmt(grandDb) + '</td>' +
+      '<td style="padding:7px 10px;text-align:right;font-weight:800;font-size:14px;color:#bbf7d0;">' + fmt(grandCr) + '</td>' +
+    '</tr>' +
+    '</tbody></table></div>';
+}
+
 function printReport() { window.print(); }
 
 function exportReportPDF() {
@@ -4111,6 +4250,7 @@ function exportReportPDF() {
     'cash-flow': 'Cash Flow Statement',
     'contrib-distribution': 'Contribution Distribution',
     'contributor-statement': 'Contributor Statement',
+    'journal-report': 'Journal Report',
   };
   const title = reportTitleMap[activeReport] || document.querySelector('#report-content h2')?.textContent || 'Report';
   const from=document.getElementById('rpt-from').value;
@@ -4365,6 +4505,8 @@ function exportReportPDF() {
     pdfFilename = `General_Ledger_${from}_to_${to}.pdf`;
   } else if (activeReport === 'cash-flow') {
     pdfFilename = `Cash_Flow_Statement_${from}_to_${to}.pdf`;
+  } else if (activeReport === 'journal-report') {
+    pdfFilename = `Journal_Report_${from}_to_${to}.pdf`;
   } else {
     pdfFilename = `${title.replace(/\s+/g,'_')}_${from}_${to}.pdf`;
   }
