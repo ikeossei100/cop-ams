@@ -3140,6 +3140,7 @@ async function finalizeReconciliation() {
 // REPORTS
 // ══════════════════════════════════════════════
 let activeReport=null;
+let _isReportCache = null;  // stores last IS data for clean PDF export
 
 function runReport(type) {
   activeReport=type;
@@ -3286,6 +3287,9 @@ async function genIncomeStatement(from,to) {
 
   const netP = totInP - totExpP;
   const netY = totInY - totExpY;
+
+  // Cache structured data for clean PDF export (avoids scraping colspan rows)
+  _isReportCache = { from, to, ytdFrom, allCodes, balP, balY, totInP, totExpP, totInY, totExpY, netP, netY };
 
   const fmtDate = d => new Date(d+'T00:00:00').toLocaleDateString('en-CA',{year:'numeric',month:'short',day:'numeric'});
   const printed = new Date().toLocaleDateString('en-CA',{year:'numeric',month:'long',day:'numeric'});
@@ -4162,18 +4166,98 @@ function exportReportPDF() {
       y+=boxH+6;
     }
   }
-  const tables=document.querySelectorAll('#report-content table');
-  tables.forEach(tbl=>{
-    const headers=Array.from(tbl.querySelectorAll('thead th')).map(th=>th.textContent.trim());
-    const rows=Array.from(tbl.querySelectorAll('tbody tr')).map(tr=>Array.from(tr.querySelectorAll('td')).map(td=>td.textContent.trim()));
-    if(rows.length>0) {
-      const colStyles=isContrib?{0:{cellWidth:18},1:{cellWidth:16},2:{cellWidth:42},3:{cellWidth:52},4:{cellWidth:28},5:{cellWidth:50},6:{cellWidth:22,halign:'right'}}:{};
-      doc.autoTable({head:[headers],body:rows,startY:y,theme:'striped',
-        headStyles:{fillColor:[26,60,143],textColor:[255,255,255],fontStyle:'bold',fontSize:9},
-        bodyStyles:{fontSize:9},columnStyles:colStyles,margin:{left:14,right:14}});
-      y=doc.lastAutoTable.finalY+8;
-    }
-  });
+  if (activeReport === 'income-statement' && _isReportCache) {
+    // Build IS PDF table directly from cached data — avoids colspan/double-header scraping issues
+    const c = _isReportCache;
+    const fmtD = d => new Date(d+'T00:00:00').toLocaleDateString('en-CA',{year:'numeric',month:'short',day:'numeric'});
+    const colLabel1 = fmtD(c.from) + ' – ' + fmtD(c.to);
+    const colLabel2 = fmtD(c.ytdFrom) + ' – ' + fmtD(c.to);
+
+    const head = [['Code', 'Account Description', 'Current Period\n' + colLabel1, 'Year to Date\n' + colLabel2]];
+    const body = [];
+
+    // Section: Income
+    body.push([{ content: 'INCOME', colSpan: 4, styles: { fillColor: [220,229,247], textColor: [26,60,143], fontStyle: 'bold', fontSize: 9 } }]);
+    c.allCodes.forEach(code => {
+      const n = parseInt(code)||0;
+      if (n < 4000 || n > 4999) return;
+      const bp = c.balP[code]||{debit:0,credit:0};
+      const by = c.balY[code]||{debit:0,credit:0};
+      const netP = Math.max(bp.debit, bp.credit);
+      const netY = Math.max(by.debit, by.credit);
+      if (netP < 0.005 && netY < 0.005) return;
+      const name = coaCache.find(a=>a.code===code)?.name || code;
+      body.push([code, name, netP>=0.005?fmt(netP):'—', netY>=0.005?fmt(netY):'—']);
+    });
+    body.push([{ content: 'Total Income', colSpan: 2, styles: { fillColor: [232,237,247], textColor: [26,60,143], fontStyle: 'bold' } },
+      { content: fmt(c.totInP), styles: { fillColor: [232,237,247], textColor: [26,60,143], fontStyle: 'bold', halign: 'right' } },
+      { content: fmt(c.totInY), styles: { fillColor: [220,229,247], textColor: [26,60,143], fontStyle: 'bold', halign: 'right' } }]);
+
+    // Section: Expenditure
+    body.push([{ content: 'EXPENDITURE', colSpan: 4, styles: { fillColor: [220,229,247], textColor: [26,60,143], fontStyle: 'bold', fontSize: 9 } }]);
+    c.allCodes.forEach(code => {
+      const n = parseInt(code)||0;
+      if (n < 5000 || n > 5999) return;
+      const bp = c.balP[code]||{debit:0,credit:0};
+      const by = c.balY[code]||{debit:0,credit:0};
+      const netP = Math.max(bp.debit, bp.credit);
+      const netY = Math.max(by.debit, by.credit);
+      if (netP < 0.005 && netY < 0.005) return;
+      const name = coaCache.find(a=>a.code===code)?.name || code;
+      body.push([code, name, netP>=0.005?fmt(netP):'—', netY>=0.005?fmt(netY):'—']);
+    });
+    body.push([{ content: 'Total Expenditure', colSpan: 2, styles: { fillColor: [232,237,247], textColor: [26,60,143], fontStyle: 'bold' } },
+      { content: fmt(c.totExpP), styles: { fillColor: [232,237,247], textColor: [26,60,143], fontStyle: 'bold', halign: 'right' } },
+      { content: fmt(c.totExpY), styles: { fillColor: [220,229,247], textColor: [26,60,143], fontStyle: 'bold', halign: 'right' } }]);
+
+    // Net surplus row
+    const fP = c.netP<0?'('+fmt(Math.abs(c.netP))+')':fmt(c.netP);
+    const fY = c.netY<0?'('+fmt(Math.abs(c.netY))+')':fmt(c.netY);
+    const sColor = [26,60,143];
+    body.push([
+      { content: 'NET SURPLUS / (DEFICIT)', colSpan: 2, styles: { fillColor: sColor, textColor: [255,255,255], fontStyle: 'bold', fontSize: 10 } },
+      { content: fP, styles: { fillColor: sColor, textColor: c.netP>=0?[187,247,208]:[252,165,165], fontStyle: 'bold', fontSize: 10, halign: 'right' } },
+      { content: fY, styles: { fillColor: [21,47,114], textColor: c.netY>=0?[187,247,208]:[252,165,165], fontStyle: 'bold', fontSize: 10, halign: 'right' } },
+    ]);
+
+    doc.autoTable({
+      head,
+      body,
+      startY: y,
+      theme: 'striped',
+      headStyles: { fillColor: [26,60,143], textColor: [255,255,255], fontStyle: 'bold', fontSize: 8, halign: 'center' },
+      bodyStyles: { fontSize: 8 },
+      columnStyles: {
+        0: { cellWidth: 18, halign: 'left', font: 'courier' },
+        1: { cellWidth: 'auto' },
+        2: { cellWidth: 38, halign: 'right' },
+        3: { cellWidth: 38, halign: 'right' },
+      },
+      margin: { left: 14, right: 14 },
+    });
+    y = doc.lastAutoTable.finalY + 8;
+  } else {
+    const tables=document.querySelectorAll('#report-content table');
+    tables.forEach(tbl=>{
+      // Use only the LAST thead row for column headers (avoids double-row headers)
+      const headRows = Array.from(tbl.querySelectorAll('thead tr'));
+      const lastHeadRow = headRows[headRows.length - 1];
+      const headers = lastHeadRow ? Array.from(lastHeadRow.querySelectorAll('th')).map(th=>th.textContent.trim()) : [];
+      const rows=Array.from(tbl.querySelectorAll('tbody tr')).map(tr=>{
+        const cells = Array.from(tr.querySelectorAll('td'));
+        // Skip pure section-header rows (single cell spanning full width)
+        if (cells.length === 1 && cells[0].colSpan > 1) return null;
+        return cells.map(td=>td.textContent.trim());
+      }).filter(Boolean);
+      if(rows.length>0) {
+        const colStyles=isContrib?{0:{cellWidth:18},1:{cellWidth:16},2:{cellWidth:42},3:{cellWidth:52},4:{cellWidth:28},5:{cellWidth:50},6:{cellWidth:22,halign:'right'}}:{};
+        doc.autoTable({head:[headers],body:rows,startY:y,theme:'striped',
+          headStyles:{fillColor:[26,60,143],textColor:[255,255,255],fontStyle:'bold',fontSize:9},
+          bodyStyles:{fontSize:9},columnStyles:colStyles,margin:{left:14,right:14}});
+        y=doc.lastAutoTable.finalY+8;
+      }
+    });
+  }
   const total=doc.getNumberOfPages();
   const pageH=isContrib?210:297;
   for(let i=1;i<=total;i++){ doc.setPage(i); doc.setFontSize(10); doc.setTextColor(150,150,150); doc.text(`Page ${i} of ${total}`,pageW-14,pageH-7,{align:'right'}); }
