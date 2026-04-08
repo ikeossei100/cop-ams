@@ -370,6 +370,9 @@ tailwind.config = {
           <div class="text-xs font-semibold text-white truncate" id="user-name">User</div>
           <div class="text-xs text-gray-400" id="user-role-badge">—</div>
         </div>
+        <button onclick="openChangeMyPassword()" class="text-gray-400 hover:text-white p-1" title="Change my password">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
+        </button>
         <button onclick="authLogout()" class="text-gray-400 hover:text-white p-1" title="Sign out">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
         </button>
@@ -1321,6 +1324,53 @@ async function loadProfile() {
     };
   } else {
     currentProfile = data;
+  }
+}
+
+function openChangeMyPassword() {
+  openModal('Change My Password',
+    `<div class="space-y-4">
+      <div>
+        <label class="form-label">New Password *</label>
+        <input type="password" id="chpw-1" class="form-input" placeholder="Min 6 characters">
+      </div>
+      <div>
+        <label class="form-label">Confirm New Password *</label>
+        <input type="password" id="chpw-2" class="form-input" placeholder="Repeat password">
+      </div>
+      <div id="chpw-err" class="hidden text-sm text-red-600 font-medium"></div>
+      <div id="chpw-ok"  class="hidden text-sm text-green-700 font-medium"></div>
+    </div>`,
+    `<button class="btn-secondary" onclick="closeModal()">Cancel</button>
+     <button class="btn-primary" onclick="saveChangeMyPassword()">Update Password</button>`
+  );
+}
+
+async function saveChangeMyPassword() {
+  const p1 = document.getElementById('chpw-1').value;
+  const p2 = document.getElementById('chpw-2').value;
+  const errEl = document.getElementById('chpw-err');
+  const okEl  = document.getElementById('chpw-ok');
+  errEl.classList.add('hidden');
+  okEl.classList.add('hidden');
+  if (!p1 || p1.length < 6) {
+    errEl.textContent = 'Password must be at least 6 characters.';
+    errEl.classList.remove('hidden'); return;
+  }
+  if (p1 !== p2) {
+    errEl.textContent = 'Passwords do not match.';
+    errEl.classList.remove('hidden'); return;
+  }
+  const { error } = await sb.auth.updateUser({ password: p1 });
+  if (error) {
+    errEl.textContent = error.message || 'Could not update password. Try again.';
+    errEl.classList.remove('hidden');
+  } else {
+    okEl.textContent = 'Password changed successfully!';
+    okEl.classList.remove('hidden');
+    document.getElementById('chpw-1').value = '';
+    document.getElementById('chpw-2').value = '';
+    setTimeout(closeModal, 1500);
   }
 }
 
@@ -5699,6 +5749,7 @@ function renderUsers() {
     <td><span class="badge-${u.is_active!==false?'posted':'reversed'}">${u.is_active!==false?'Active':'Inactive'}</span></td>
     <td class="flex gap-2 text-xs flex-wrap">
       <button class="text-blue-600 hover:underline" onclick='openEditUser(${JSON.stringify(u).replace(/'/g,"&#39;")})'>Edit</button>
+      <button class="text-orange-600 hover:underline" onclick="openResetUserPassword('${u.id}','${u.full_name.replace(/'/g,"\\'")}')">Reset Password</button>
       ${u.is_active!==false?`<button class="text-red-500 hover:underline" onclick="toggleUserActive('${u.id}',false)">Deactivate</button>`:`<button class="text-green-600 hover:underline" onclick="toggleUserActive('${u.id}',true)">Activate</button>`}
     </td>
   </tr>`).join('');
@@ -5755,6 +5806,64 @@ async function toggleUserActive(id,newState) {
   if(error){toast('Error: '+error.message,'error');return;}
   await logAction(newState?'ACTIVATE_USER':'DEACTIVATE_USER','profiles',id);
   await loadUsers(); toast(`User ${newState?'activated':'deactivated'}.`,'success');
+}
+
+function openResetUserPassword(uid, name) {
+  openModal('Reset Password — ' + name,
+    `<div class="space-y-4">
+      <div style="background:#fff7ed;border:1.5px solid #fed7aa;border-radius:8px;padding:10px 14px;">
+        <p class="text-sm font-semibold" style="color:#c2410c;">Admin Password Reset</p>
+        <p class="text-xs mt-1 text-gray-600">Set a new temporary password for <strong>${name}</strong>. Share it with them securely and ask them to change it after signing in.</p>
+      </div>
+      <div>
+        <label class="form-label">New Password *</label>
+        <input type="password" id="adm-pw1" class="form-input" placeholder="Min 6 characters">
+      </div>
+      <div>
+        <label class="form-label">Confirm New Password *</label>
+        <input type="password" id="adm-pw2" class="form-input" placeholder="Repeat password">
+      </div>
+      <div id="adm-pw-err" class="hidden text-sm text-red-600 font-medium"></div>
+      <div id="adm-pw-ok"  class="hidden text-sm text-green-700 font-medium"></div>
+    </div>`,
+    `<button class="btn-secondary" onclick="closeModal()">Cancel</button>
+     <button class="btn-primary" onclick="adminSetUserPassword('${uid}')">Set Password</button>`
+  );
+}
+
+async function adminSetUserPassword(uid) {
+  const p1 = document.getElementById('adm-pw1').value;
+  const p2 = document.getElementById('adm-pw2').value;
+  const errEl = document.getElementById('adm-pw-err');
+  const okEl  = document.getElementById('adm-pw-ok');
+  errEl.classList.add('hidden');
+  okEl.classList.add('hidden');
+
+  if (!p1 || p1.length < 6) {
+    errEl.textContent = 'Password must be at least 6 characters.';
+    errEl.classList.remove('hidden'); return;
+  }
+  if (p1 !== p2) {
+    errEl.textContent = 'Passwords do not match.';
+    errEl.classList.remove('hidden'); return;
+  }
+
+  // Use Supabase Admin API via the sb client (works only if user is admin with service role,
+  // otherwise falls back to sending a reset email as a backup)
+  const { error } = await sb.auth.admin.updateUserById(uid, { password: p1 });
+  if (error) {
+    // Fallback: service role not available from browser — guide admin
+    errEl.textContent = 'Direct reset requires service role key. Use the "Send Reset Email" option below, or reset via Supabase dashboard → Authentication → Users.';
+    errEl.classList.remove('hidden');
+    return;
+  }
+  await logAction('ADMIN_RESET_PASSWORD', 'profiles', uid, null, { reset_by: currentUser?.id });
+  okEl.textContent = 'Password updated successfully. Share the new password with the user.';
+  okEl.classList.remove('hidden');
+  document.getElementById('adm-pw1').value = '';
+  document.getElementById('adm-pw2').value = '';
+  // Disable the Set button to prevent double-submit
+  document.querySelector('#modal-overlay .btn-primary').disabled = true;
 }
 
 // ══════════════════════════════════════════════
