@@ -231,6 +231,25 @@ tailwind.config = {
           <input type="password" id="auth-password" class="form-input" placeholder="••••••••" autocomplete="current-password">
         </div>
         <button onclick="authLogin()" class="w-full btn-primary py-3 text-base" style="letter-spacing:0.02em;">Sign In to AMS</button>
+        <p class="text-center text-xs mt-1">
+          <button type="button" onclick="switchAuthTab('reset')" style="color:#0284c7;background:none;border:none;cursor:pointer;font-size:12px;text-decoration:underline;">Forgot your password?</button>
+        </p>
+      </div>
+
+      <!-- FORGOT PASSWORD panel -->
+      <div id="auth-panel-reset" class="space-y-4" style="display:none;">
+        <div style="background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:8px;padding:12px 14px;">
+          <p class="text-sm font-semibold" style="color:#1e40af;">Reset Your Password</p>
+          <p class="text-xs mt-1" style="color:#3b82f6;">Enter the email address you registered with. We will send you a link to set a new password.</p>
+        </div>
+        <div>
+          <label class="form-label">Email Address</label>
+          <input type="email" id="reset-email" class="form-input" placeholder="you@example.com" autocomplete="email">
+        </div>
+        <button onclick="authSendReset()" class="w-full btn-primary py-3 text-base" style="letter-spacing:0.02em;">Send Reset Link</button>
+        <p class="text-center text-xs mt-1">
+          <button type="button" onclick="switchAuthTab('signin')" style="color:#0284c7;background:none;border:none;cursor:pointer;font-size:12px;text-decoration:underline;">← Back to Sign In</button>
+        </p>
       </div>
 
       <!-- CREATE ACCOUNT panel -->
@@ -1193,14 +1212,46 @@ async function authLogin() {
 }
 
 function switchAuthTab(tab) {
-  const isSignin = tab === 'signin';
-  document.getElementById('auth-panel-signin').style.display   = isSignin ? 'block' : 'none';
-  document.getElementById('auth-panel-register').style.display = isSignin ? 'none'  : 'block';
-  document.getElementById('tab-signin').style.background    = isSignin ? '#1a3c8f' : '#f8f9fa';
-  document.getElementById('tab-signin').style.color         = isSignin ? 'white'   : '#64748b';
-  document.getElementById('tab-register').style.background  = isSignin ? '#f8f9fa' : '#1a3c8f';
-  document.getElementById('tab-register').style.color       = isSignin ? '#64748b' : 'white';
+  const isSignin   = tab === 'signin';
+  const isRegister = tab === 'register';
+  const isReset    = tab === 'reset';
+  document.getElementById('auth-panel-signin').style.display   = isSignin   ? 'block' : 'none';
+  document.getElementById('auth-panel-register').style.display = isRegister ? 'block' : 'none';
+  document.getElementById('auth-panel-reset').style.display    = isReset    ? 'block' : 'none';
+  document.getElementById('tab-signin').style.background    = isSignin   ? '#1a3c8f' : '#f8f9fa';
+  document.getElementById('tab-signin').style.color         = isSignin   ? 'white'   : '#64748b';
+  document.getElementById('tab-register').style.background  = isRegister ? '#1a3c8f' : '#f8f9fa';
+  document.getElementById('tab-register').style.color       = isRegister ? 'white'   : '#64748b';
   ['auth-error','auth-lockout','auth-success'].forEach(id => document.getElementById(id).classList.add('hidden'));
+}
+
+async function authSendReset() {
+  const email = (document.getElementById('reset-email').value || '').trim();
+  const errEl = document.getElementById('auth-error');
+  const okEl  = document.getElementById('auth-success');
+  errEl.classList.add('hidden');
+  okEl.classList.add('hidden');
+  if (!email) {
+    errEl.textContent = 'Please enter your email address.';
+    errEl.classList.remove('hidden');
+    return;
+  }
+  try {
+    // redirectTo must point back to the app so Supabase can handle the token
+    const redirectTo = window.location.origin + window.location.pathname;
+    const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo });
+    if (error) {
+      errEl.textContent = error.message || 'Could not send reset email. Try again.';
+      errEl.classList.remove('hidden');
+    } else {
+      okEl.textContent = 'Password reset email sent to ' + email + '. Check your inbox (and spam folder) and click the link to set a new password.';
+      okEl.classList.remove('hidden');
+      document.getElementById('reset-email').value = '';
+    }
+  } catch(e) {
+    errEl.textContent = 'Connection error. Check your internet connection.';
+    errEl.classList.remove('hidden');
+  }
 }
 
 async function authRegister() {
@@ -6177,7 +6228,77 @@ async function loadDashboard() {
 // INIT
 // ══════════════════════════════════════════════
 document.getElementById('auth-password').addEventListener('keydown', e => { if(e.key==='Enter') authLogin(); });
-document.addEventListener('DOMContentLoaded', () => { checkSession(); });
+document.addEventListener('DOMContentLoaded', () => {
+  // Detect Supabase password-recovery redirect (URL contains #access_token + type=recovery)
+  const hash = window.location.hash;
+  if (hash.includes('type=recovery') && hash.includes('access_token')) {
+    // Supabase has already set the session from the URL fragment — show set-new-password UI
+    showSetNewPasswordPanel();
+  } else {
+    checkSession();
+  }
+});
+
+function showSetNewPasswordPanel() {
+  // Hide all auth panels and show the set-new-password form
+  ['auth-panel-signin','auth-panel-register','auth-panel-reset'].forEach(id => {
+    document.getElementById(id).style.display = 'none';
+  });
+  document.getElementById('tab-signin').style.display   = 'none';
+  document.getElementById('tab-register').style.display = 'none';
+
+  const panel = document.getElementById('auth-panel-signin').parentElement;
+  const newDiv = document.createElement('div');
+  newDiv.id = 'auth-panel-newpass';
+  newDiv.innerHTML = `
+    <div style="background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:8px;padding:12px 14px;margin-bottom:16px;">
+      <p class="text-sm font-semibold" style="color:#1e40af;">Set a New Password</p>
+      <p class="text-xs mt-1" style="color:#3b82f6;">Choose a new password for your account. Must be at least 6 characters.</p>
+    </div>
+    <div class="space-y-4">
+      <div>
+        <label class="form-label">New Password</label>
+        <input type="password" id="newpass-1" class="form-input" placeholder="Min 6 characters">
+      </div>
+      <div>
+        <label class="form-label">Confirm New Password</label>
+        <input type="password" id="newpass-2" class="form-input" placeholder="Repeat new password">
+      </div>
+      <button onclick="authSetNewPassword()" class="w-full btn-primary py-3 text-base">Set New Password</button>
+    </div>`;
+  panel.appendChild(newDiv);
+}
+
+async function authSetNewPassword() {
+  const p1 = document.getElementById('newpass-1').value;
+  const p2 = document.getElementById('newpass-2').value;
+  const errEl = document.getElementById('auth-error');
+  const okEl  = document.getElementById('auth-success');
+  errEl.classList.add('hidden');
+  okEl.classList.add('hidden');
+  if (!p1 || p1.length < 6) {
+    errEl.textContent = 'Password must be at least 6 characters.';
+    errEl.classList.remove('hidden'); return;
+  }
+  if (p1 !== p2) {
+    errEl.textContent = 'Passwords do not match.';
+    errEl.classList.remove('hidden'); return;
+  }
+  const { error } = await sb.auth.updateUser({ password: p1 });
+  if (error) {
+    errEl.textContent = error.message || 'Could not update password. Try again.';
+    errEl.classList.remove('hidden');
+  } else {
+    okEl.textContent = 'Password updated successfully! Signing you in…';
+    okEl.classList.remove('hidden');
+    // Clean the URL fragment so it doesn't re-trigger on refresh
+    history.replaceState(null, '', window.location.pathname);
+    setTimeout(async () => {
+      const { data: { session } } = await sb.auth.getSession();
+      if (session) { currentUser = session.user; await loadProfile(); startApp(); }
+    }, 1500);
+  }
+}
 </script>
 </body>
 </html>
