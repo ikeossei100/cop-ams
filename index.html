@@ -210,10 +210,18 @@ tailwind.config = {
         <div style="width:40px;height:3px;background:linear-gradient(90deg,#1a3c8f,#FFD700);border-radius:2px;margin:12px auto 0;"></div>
       </div>
 
+      <!-- Tab switcher -->
+      <div class="flex mb-6 rounded-lg overflow-hidden border border-gray-200">
+        <button id="tab-signin" onclick="switchAuthTab('signin')" class="flex-1 py-2 text-sm font-semibold transition-colors" style="background:#1a3c8f;color:white;">Sign In</button>
+        <button id="tab-register" onclick="switchAuthTab('register')" class="flex-1 py-2 text-sm font-semibold transition-colors" style="background:#f8f9fa;color:#64748b;">Create Account</button>
+      </div>
+
       <div id="auth-error" class="hidden mb-4 p-3 rounded-lg text-sm" style="background:#fef2f2;border:1.5px solid #fecaca;color:#b91c1c;"></div>
       <div id="auth-lockout" class="hidden mb-4 p-3 rounded-lg text-sm" style="background:#fff7ed;border:1.5px solid #fed7aa;color:#c2410c;"></div>
+      <div id="auth-success" class="hidden mb-4 p-3 rounded-lg text-sm" style="background:#f0fdf4;border:1.5px solid #bbf7d0;color:#15803d;"></div>
 
-      <div class="space-y-5">
+      <!-- SIGN IN panel -->
+      <div id="auth-panel-signin" class="space-y-5">
         <div>
           <label class="form-label">Email Address</label>
           <input type="email" id="auth-email" class="form-input" placeholder="you@copcanada.org" autocomplete="username">
@@ -223,6 +231,44 @@ tailwind.config = {
           <input type="password" id="auth-password" class="form-input" placeholder="••••••••" autocomplete="current-password">
         </div>
         <button onclick="authLogin()" class="w-full btn-primary py-3 text-base" style="letter-spacing:0.02em;">Sign In to AMS</button>
+      </div>
+
+      <!-- CREATE ACCOUNT panel -->
+      <div id="auth-panel-register" class="space-y-4" style="display:none;">
+        <div>
+          <label class="form-label">Full Name *</label>
+          <input type="text" id="reg-name" class="form-input" placeholder="e.g. Kwame Mensah">
+        </div>
+        <div>
+          <label class="form-label">Email Address *</label>
+          <input type="email" id="reg-email" class="form-input" placeholder="you@example.com">
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="form-label">Password *</label>
+            <input type="password" id="reg-password" class="form-input" placeholder="Min 6 characters">
+          </div>
+          <div>
+            <label class="form-label">Confirm Password *</label>
+            <input type="password" id="reg-confirm" class="form-input" placeholder="Repeat password">
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="form-label">Role</label>
+            <select id="reg-role" class="form-input">
+              <option value="viewer">Viewer (read-only)</option>
+              <option value="dataentry">Data Entry</option>
+              <option value="accountant">Accountant</option>
+            </select>
+          </div>
+          <div>
+            <label class="form-label">District / Branch</label>
+            <input type="text" id="reg-district" class="form-input" placeholder="e.g. Toronto">
+          </div>
+        </div>
+        <button onclick="authRegister()" class="w-full btn-primary py-3 text-base" style="letter-spacing:0.02em;">Create My Account</button>
+        <p class="text-xs text-center" style="color:#94a3b8;">After creating your account, sign in with your email and password.</p>
       </div>
 
       <p class="text-center text-xs mt-6" style="color:#94a3b8;">COP AMS v1.0 &mdash; Canada Inc &middot; General Fund</p>
@@ -1146,6 +1192,71 @@ async function authLogin() {
   }
 }
 
+function switchAuthTab(tab) {
+  const isSignin = tab === 'signin';
+  document.getElementById('auth-panel-signin').style.display   = isSignin ? 'block' : 'none';
+  document.getElementById('auth-panel-register').style.display = isSignin ? 'none'  : 'block';
+  document.getElementById('tab-signin').style.background    = isSignin ? '#1a3c8f' : '#f8f9fa';
+  document.getElementById('tab-signin').style.color         = isSignin ? 'white'   : '#64748b';
+  document.getElementById('tab-register').style.background  = isSignin ? '#f8f9fa' : '#1a3c8f';
+  document.getElementById('tab-register').style.color       = isSignin ? '#64748b' : 'white';
+  ['auth-error','auth-lockout','auth-success'].forEach(id => document.getElementById(id).classList.add('hidden'));
+}
+
+async function authRegister() {
+  const name     = (document.getElementById('reg-name').value||'').trim();
+  const email    = (document.getElementById('reg-email').value||'').trim();
+  const password = document.getElementById('reg-password').value;
+  const confirm  = document.getElementById('reg-confirm').value;
+  const role     = document.getElementById('reg-role').value;
+  const district = (document.getElementById('reg-district').value||'').trim();
+  const errEl    = document.getElementById('auth-error');
+  const okEl     = document.getElementById('auth-success');
+  errEl.classList.add('hidden'); okEl.classList.add('hidden');
+
+  if (!name || !email || !password) {
+    errEl.textContent = 'Full name, email and password are required.';
+    errEl.classList.remove('hidden'); return;
+  }
+  if (password.length < 6) {
+    errEl.textContent = 'Password must be at least 6 characters.';
+    errEl.classList.remove('hidden'); return;
+  }
+  if (password !== confirm) {
+    errEl.textContent = 'Passwords do not match.';
+    errEl.classList.remove('hidden'); return;
+  }
+
+  try {
+    // 1. Create Supabase Auth user
+    const { data, error } = await sb.auth.signUp({ email, password });
+    if (error) {
+      errEl.textContent = error.message || 'Could not create account.';
+      errEl.classList.remove('hidden'); return;
+    }
+
+    const uid = data.user?.id;
+    if (uid) {
+      // 2. Create profile row
+      await sb.from('profiles').upsert({
+        id: uid, full_name: name, role, district: district||null,
+        is_active: true, failed_attempts: 0
+      }, { onConflict: 'id' });
+    }
+
+    okEl.textContent = 'Account created! You can now sign in with your email and password.';
+    okEl.classList.remove('hidden');
+    // Clear fields
+    ['reg-name','reg-email','reg-password','reg-confirm','reg-district'].forEach(id => {
+      const el = document.getElementById(id); if (el) el.value = '';
+    });
+    setTimeout(() => switchAuthTab('signin'), 2500);
+  } catch(e) {
+    errEl.textContent = 'Connection error. Please try again.';
+    errEl.classList.remove('hidden');
+  }
+}
+
 async function loadProfile() {
   const { data } = await sb.from('profiles').select('*').eq('id', currentUser.id).single();
   // If no profile row exists yet, create a default admin profile so the user isn't locked out
@@ -1268,6 +1379,8 @@ async function logAction(action, tableName, recordId, oldVal, newVal) {
 function fmt(n) { return '$' + (parseFloat(n)||0).toLocaleString('en-CA',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 // Returns user ID only if a real profile row exists in DB (avoids FK violations)
 function myId() { return currentProfile?._no_profile_row ? null : (currentUser?.id || null); }
+// Apply per-user data isolation to any Supabase query builder
+function withUser(q) { const uid=myId(); return uid ? q.eq('entered_by',uid) : q; }
 function fmtNum(n) { return (parseFloat(n)||0).toLocaleString('en-CA',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function today() { return new Date().toISOString().split('T')[0]; }
 
@@ -1747,8 +1860,8 @@ async function viewAccountActivity(code) {
 
   // Fetch all posted journals and contributions for the period
   const [jRes, cRes] = await Promise.all([
-    sb.from('journals').select('*').eq('status','posted').gte('date',from).lte('date',to),
-    sb.from('contributions').select('*').eq('status','posted').gte('date',from).lte('date',to)
+    withUser(sb.from('journals').select('*').eq('status','posted').gte('date',from).lte('date',to)),
+    withUser(sb.from('contributions').select('*').eq('status','posted').gte('date',from).lte('date',to))
   ]);
 
   const entries = [];
@@ -1783,8 +1896,8 @@ async function viewAccountActivity(code) {
 
   // Running balance (opening balance: fetch all posted entries before 'from')
   const [jOpen, cOpen] = await Promise.all([
-    sb.from('journals').select('*').eq('status','posted').lt('date',from),
-    sb.from('contributions').select('*').eq('status','posted').lt('date',from)
+    withUser(sb.from('journals').select('*').eq('status','posted').lt('date',from)),
+    withUser(sb.from('contributions').select('*').eq('status','posted').lt('date',from))
   ]);
   let openingBalance = 0;
   (jOpen.data||[]).forEach(j=>(j.lines||[]).forEach(l=>{
@@ -1966,7 +2079,7 @@ async function loadContributions() {
   if (!month) return;
   const [yr,mo] = month.split('-');
   const from = `${yr}-${mo}-01`, to = `${yr}-${mo}-31`;
-  let q = sb.from('contributions').select('*').gte('date',from).lte('date',to).order('date');
+  let q = withUser(sb.from('contributions').select('*').gte('date',from).lte('date',to).order('date'));
   if (statusFilter) q = q.eq('status',statusFilter);
   const {data,error} = await q;
   if (error) { toast('Failed to load: '+error.message,'error'); return; }
@@ -2319,7 +2432,7 @@ async function loadJournals() {
   if (!month) return;
   const [yr,mo]=month.split('-');
   const from=`${yr}-${mo}-01`,to=`${yr}-${mo}-31`;
-  let q=sb.from('journals').select('*').gte('date',from).lte('date',to).order('date');
+  let q=withUser(sb.from('journals').select('*').gte('date',from).lte('date',to).order('date'));
   if (typeF) q=q.eq('type',typeF);
   if (statusF) q=q.eq('status',statusF);
   const {data,error}=await q;
@@ -2716,7 +2829,7 @@ function exportJnlPDF() {
 let apData=[];
 
 async function loadAP() {
-  const {data,error}=await sb.from('journals').select('*').eq('type','AP').order('date',{ascending:false}).limit(100);
+  const {data,error}=await withUser(sb.from('journals').select('*').eq('type','AP').order('date',{ascending:false}).limit(100));
   if(error){toast('Failed to load AP: '+error.message,'error');return;}
   apData=data||[];
   const role=currentProfile?.role||'viewer';
@@ -2780,7 +2893,7 @@ function viewJournalById(id) {
 let arData=[];
 
 async function loadAR() {
-  const {data,error}=await sb.from('journals').select('*').eq('type','AR').order('date',{ascending:false}).limit(100);
+  const {data,error}=await withUser(sb.from('journals').select('*').eq('type','AR').order('date',{ascending:false}).limit(100));
   if(error){toast('Failed to load AR: '+error.message,'error');return;}
   arData=data||[];
   const role=currentProfile?.role||'viewer';
@@ -2848,7 +2961,7 @@ async function loadBankRec() {
   if(!period){toast('Select a period first.','error');return;}
   const [yr,mo]=period.split('-');
   const from=`${yr}-${mo}-01`,to=`${yr}-${mo}-31`;
-  const {data:journals}=await sb.from('journals').select('*').eq('status','posted').gte('date',from).lte('date',to);
+  const {data:journals}=await withUser(sb.from('journals').select('*').eq('status','posted').gte('date',from).lte('date',to));
   const cashCodes=['1091','1092','1110','1113','1115','1121'];
   bankRecItems=[];
   (journals||[]).forEach(j=>{
@@ -2859,7 +2972,7 @@ async function loadBankRec() {
       }
     });
   });
-  const contribs_result=await sb.from('contributions').select('*').eq('status','posted').gte('date',from).lte('date',to).in('account_code',cashCodes);
+  const contribs_result=await withUser(sb.from('contributions').select('*').eq('status','posted').gte('date',from).lte('date',to).in('account_code',cashCodes));
   (contribs_result.data||[]).forEach(c=>{
     bankRecItems.push({id:'c_'+c.id,date:c.date,desc:c.description,ref:c.ref_no,
       amount:parseFloat(c.amount)||0,dc:'DB',account:c.account_code,matched:false});
@@ -2972,11 +3085,15 @@ async function generateReport() {
 }
 
 async function getPostedJournals(from,to) {
-  const {data}=await sb.from('journals').select('*').eq('status','posted').gte('date',from).lte('date',to);
+  let q = sb.from('journals').select('*').eq('status','posted').gte('date',from).lte('date',to);
+  const uid = myId(); if (uid) q = q.eq('entered_by', uid);
+  const {data}=await q;
   return data||[];
 }
 async function getPostedContribs(from,to) {
-  const {data}=await sb.from('contributions').select('*').eq('status','posted').gte('date',from).lte('date',to);
+  let q = sb.from('contributions').select('*').eq('status','posted').gte('date',from).lte('date',to);
+  const uid = myId(); if (uid) q = q.eq('entered_by', uid);
+  const {data}=await q;
   return data||[];
 }
 
@@ -3096,7 +3213,7 @@ async function genBalanceSheet(from,to) {
 }
 
 async function genContribDistribution(from,to) {
-  const {data,error}=await sb.from('contributions').select('*').eq('status','posted').gte('date',from).lte('date',to).order('date',{ascending:true});
+  const {data,error}=await withUser(sb.from('contributions').select('*').eq('status','posted').gte('date',from).lte('date',to).order('date',{ascending:true}));
   if(error){toast('Error: '+error.message,'error');return;}
   const list=data||[];
   const rows=list.map(c=>{
@@ -3132,7 +3249,7 @@ async function filterContributorSuggestions() {
   const box=document.getElementById('contributor-suggestions');
   if(!q){box.style.display='none';return;}
   if(!contributorNames.length){
-    const {data}=await sb.from('contributions').select('contributor_name').not('contributor_name','is',null).neq('contributor_name','');
+    const {data}=await withUser(sb.from('contributions').select('contributor_name').not('contributor_name','is',null).neq('contributor_name',''));
     contributorNames=[...new Set((data||[]).map(r=>r.contributor_name).filter(Boolean))].sort();
   }
   const matches=contributorNames.filter(n=>n.toLowerCase().includes(q)).slice(0,10);
@@ -3149,9 +3266,9 @@ function selectContributor(name){
 async function genContributorStatement(from,to) {
   const name=(document.getElementById('rpt-contributor').value||'').trim();
   if(!name){toast('Enter a contributor name.','error');return;}
-  const {data,error}=await sb.from('contributions').select('*')
+  const {data,error}=await withUser(sb.from('contributions').select('*')
     .ilike('contributor_name',name).eq('status','posted')
-    .gte('date',from).lte('date',to).order('date',{ascending:true});
+    .gte('date',from).lte('date',to).order('date',{ascending:true}));
   if(error){toast('Error: '+error.message,'error');return;}
   const list=data||[];
   // Grab contact details from first record
@@ -3263,9 +3380,9 @@ async function doPrintAllStatements(from, to, exportPDF=false) {
   toast(`Loading ${checked.length} statement(s)…`,'info');
 
   // Fetch all contributions for selected contributors in one query
-  const {data,error}=await sb.from('contributions').select('*')
+  const {data,error}=await withUser(sb.from('contributions').select('*')
     .eq('status','posted').gte('date',from).lte('date',to)
-    .in('contributor_name',checked).order('contributor_name').order('date');
+    .in('contributor_name',checked).order('contributor_name').order('date'));
   if(error){toast('Error: '+error.message,'error');return;}
 
   // Group by contributor name
@@ -4829,10 +4946,10 @@ async function loadDistrictIncomeSummary() {
   try {
     // Fetch contributions for period and YTD (posted only)
     const [cPeriodRes, cYTDRes, jPeriodRes, jYTDRes] = await Promise.all([
-      sb.from('contributions').select('account_code,amount').eq('status','posted').gte('date',periodFrom).lte('date',periodTo),
-      sb.from('contributions').select('account_code,amount').eq('status','posted').gte('date',ytdFrom).lte('date',ytdTo),
-      sb.from('journals').select('lines').eq('status','posted').gte('date',periodFrom).lte('date',periodTo),
-      sb.from('journals').select('lines').eq('status','posted').gte('date',ytdFrom).lte('date',ytdTo)
+      withUser(sb.from('contributions').select('account_code,amount').eq('status','posted').gte('date',periodFrom).lte('date',periodTo)),
+      withUser(sb.from('contributions').select('account_code,amount').eq('status','posted').gte('date',ytdFrom).lte('date',ytdTo)),
+      withUser(sb.from('journals').select('lines').eq('status','posted').gte('date',periodFrom).lte('date',periodTo)),
+      withUser(sb.from('journals').select('lines').eq('status','posted').gte('date',ytdFrom).lte('date',ytdTo))
     ]);
 
     // District account codes: 4051–4088 (children of 4050 in COA)
@@ -5019,9 +5136,9 @@ async function loadImportedRecords() {
   panel.innerHTML = '<p class="text-xs text-gray-400 py-4 text-center">Loading…</p>';
 
   const [jnlRes, bankRes] = await Promise.all([
-    sb.from('journals').select('id,date,ref_no,description,total_debit,total_credit,status,lines,entered_by,posted_at')
-      .in('ref_no', ['OB-IMPORT','IS-IMPORT']).order('date', {ascending:false}),
-    sb.from('bank_reconciliation').select('*').order('period_date', {ascending:false})
+    withUser(sb.from('journals').select('id,date,ref_no,description,total_debit,total_credit,status,lines,entered_by,posted_at')
+      .in('ref_no', ['OB-IMPORT','IS-IMPORT']).order('date', {ascending:false})),
+    withUser(sb.from('bank_reconciliation').select('*').order('period_date', {ascending:false}))
   ]);
 
   const jnls = jnlRes.data || [];
@@ -5510,10 +5627,10 @@ async function runDashAccountActivity() {
 
   // Fetch data
   const [jRes,cRes,jOpen,cOpen]=await Promise.all([
-    sb.from('journals').select('*').eq('status','posted').gte('date',from).lte('date',to),
-    sb.from('contributions').select('*').eq('status','posted').gte('date',from).lte('date',to),
-    sb.from('journals').select('*').eq('status','posted').lt('date',from),
-    sb.from('contributions').select('*').eq('status','posted').lt('date',from)
+    withUser(sb.from('journals').select('*').eq('status','posted').gte('date',from).lte('date',to)),
+    withUser(sb.from('contributions').select('*').eq('status','posted').gte('date',from).lte('date',to)),
+    withUser(sb.from('journals').select('*').eq('status','posted').lt('date',from)),
+    withUser(sb.from('contributions').select('*').eq('status','posted').lt('date',from))
   ]);
 
   // Build entries
