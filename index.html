@@ -611,8 +611,20 @@ tailwind.config = {
       <button class="btn-secondary text-xs" onclick="exportContribCSV()">Export CSV</button>
       <button class="btn-secondary text-xs" onclick="downloadContribTemplate()">Download Template</button>
       <button class="btn-gold text-xs role-entry-only" onclick="openContribImport()">Import Excel</button>
+      <button id="btn-post-selected" class="btn-primary text-xs role-accountant-only hidden" onclick="postSelectedContribs()">Post Selected</button>
       <button class="btn-primary text-xs role-entry-only" onclick="openContribForm()">+ New Entry</button>
     </div>
+  </div>
+
+  <!-- Bulk select bar — shown only when drafts are present -->
+  <div id="contrib-bulk-bar" class="hidden mb-3 p-2 rounded-lg flex items-center gap-3 flex-wrap" style="background:#eff6ff;border:1px solid #bfdbfe;">
+    <label class="flex items-center gap-1.5 text-xs font-semibold cursor-pointer text-blue-800">
+      <input type="checkbox" id="contrib-select-all" onchange="toggleSelectAllContribs(this.checked)">
+      Select all drafts
+    </label>
+    <span id="contrib-selected-count" class="text-xs text-blue-700">0 selected</span>
+    <span class="text-xs text-gray-400">|</span>
+    <span class="text-xs text-gray-500">Select rows then click <strong>Post Selected</strong> to post to accounting</span>
   </div>
 
   <!-- ── Contribution Excel Import Panel ── -->
@@ -675,7 +687,7 @@ tailwind.config = {
   </div>
   <div class="card overflow-hidden">
     <table class="tbl">
-      <thead><tr><th>Date</th><th>Ref#</th><th>Envelope</th><th>Contributor</th><th>Account</th><th>Description</th><th>District</th><th>Amount</th><th>Status</th><th>Actions</th></tr></thead>
+      <thead><tr><th class="w-8"></th><th>Date</th><th>Ref#</th><th>Envelope</th><th>Contributor</th><th>Account</th><th>Description</th><th>District</th><th>Amount</th><th>Status</th><th>Actions</th></tr></thead>
       <tbody id="contrib-tbody"><tr><td colspan="9" class="text-center py-8 text-gray-400">Select a month to load contributions.</td></tr></tbody>
     </table>
   </div>
@@ -2258,13 +2270,25 @@ function renderContributions() {
   const role = currentProfile?.role||'viewer';
   const canPost = ['admin','accountant'].includes(role);
   const canEnter = canPost || role==='dataentry';
+  const hasDrafts = canPost && contribData.some(c => c.status === 'draft');
+
+  // Show/hide bulk controls
+  document.getElementById('contrib-bulk-bar').classList.toggle('hidden', !hasDrafts);
+  document.getElementById('btn-post-selected').classList.toggle('hidden', !hasDrafts);
+  if (document.getElementById('contrib-select-all')) document.getElementById('contrib-select-all').checked = false;
+  if (document.getElementById('contrib-selected-count')) document.getElementById('contrib-selected-count').textContent = '0 selected';
+
   let total = 0;
   const rows = contribData.map(c => {
     total += parseFloat(c.amount)||0;
     const acct = coaCache.find(a=>a.code===c.account_code);
     const acctName = acct?`${c.account_code} – ${acct.name}`:c.account_code||'';
     const contributor = c.contributor_name || '—';
+    const chk = (c.status === 'draft' && canPost)
+      ? `<input type="checkbox" class="contrib-draft-chk rounded" value="${c.id}" onchange="updateContribSelectedCount()">`
+      : '';
     return `<tr>
+      <td class="text-center">${chk}</td>
       <td>${c.date}</td><td>${c.ref_no||'—'}</td>
       <td class="font-mono text-xs">${c.envelope_number||'—'}</td>
       <td>
@@ -2284,8 +2308,85 @@ function renderContributions() {
       </td>
     </tr>`;
   }).join('');
-  document.getElementById('contrib-tbody').innerHTML = rows||'<tr><td colspan="10" class="text-center py-8 text-gray-400">No contributions found.</td></tr>';
+  document.getElementById('contrib-tbody').innerHTML = rows||'<tr><td colspan="11" class="text-center py-8 text-gray-400">No contributions found.</td></tr>';
   document.getElementById('contrib-total').textContent = fmt(total);
+}
+
+function toggleSelectAllContribs(checked) {
+  document.querySelectorAll('.contrib-draft-chk').forEach(c => c.checked = checked);
+  updateContribSelectedCount();
+}
+
+function updateContribSelectedCount() {
+  const sel = document.querySelectorAll('.contrib-draft-chk:checked').length;
+  const el = document.getElementById('contrib-selected-count');
+  if (el) el.textContent = sel + ' selected';
+  // Also uncheck "select all" if not all are checked
+  const all = document.querySelectorAll('.contrib-draft-chk').length;
+  const sa = document.getElementById('contrib-select-all');
+  if (sa) sa.checked = sel > 0 && sel === all;
+}
+
+async function postSelectedContribs() {
+  const ids = [...document.querySelectorAll('.contrib-draft-chk:checked')].map(c => c.value);
+  if (!ids.length) { toast('No contributions selected. Check the boxes next to the draft rows you want to post.', 'error'); return; }
+
+  const total = ids.reduce((s,id) => {
+    const c = contribData.find(x=>x.id===id);
+    return s + (parseFloat(c?.amount)||0);
+  }, 0);
+
+  openModal('Post ' + ids.length + ' Contribution(s) to Accounting',
+    `<div class="space-y-3">
+      <div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:8px;padding:12px 14px;">
+        <p class="text-sm font-semibold text-green-800">Ready to post ${ids.length} contribution(s)</p>
+        <p class="text-sm text-green-700 mt-1">Total amount: <strong>${fmt(total)}</strong></p>
+        <p class="text-xs text-green-600 mt-2">Each contribution will be marked as <strong>Posted</strong> and a double-entry journal will be created automatically (DR Bank / CR Income).</p>
+      </div>
+      <p class="text-xs text-gray-500">This cannot be undone directly — posted entries can only be reversed.</p>
+      <div id="bulk-post-progress" class="hidden">
+        <div class="flex items-center gap-2">
+          <div class="w-full bg-gray-200 rounded-full h-2">
+            <div id="bulk-post-bar" class="h-2 rounded-full transition-all" style="background:#1a3c8f;width:0%"></div>
+          </div>
+          <span id="bulk-post-label" class="text-xs text-gray-600 whitespace-nowrap">0 / ${ids.length}</span>
+        </div>
+      </div>
+    </div>`,
+    `<button class="btn-secondary" onclick="closeModal()">Cancel</button>
+     <button class="btn-primary" id="bulk-post-confirm-btn" onclick="executeBulkPost(${JSON.stringify(ids)})">Post All ${ids.length}</button>`
+  );
+}
+
+async function executeBulkPost(ids) {
+  const btn = document.getElementById('bulk-post-confirm-btn');
+  const prog = document.getElementById('bulk-post-progress');
+  const bar  = document.getElementById('bulk-post-bar');
+  const lbl  = document.getElementById('bulk-post-label');
+  btn.disabled = true;
+  btn.textContent = 'Posting…';
+  prog.classList.remove('hidden');
+
+  let done = 0, failed = 0;
+  for (const id of ids) {
+    const contrib = contribData.find(c=>c.id===id);
+    if (!contrib || contrib.status !== 'draft') { done++; continue; }
+    try {
+      const jnlId = await createContribJournal(contrib);
+      const payload = { status:'posted', posted_at: new Date().toISOString(), posted_by: myId() };
+      if (jnlId) payload.journal_id = jnlId;
+      const { error } = await sb.from('contributions').update(payload).eq('id', id).eq('status','draft');
+      if (error) { failed++; } else { await logAction('POST','contributions',id); }
+    } catch(e) { failed++; }
+    done++;
+    const pct = Math.round((done / ids.length) * 100);
+    if (bar) bar.style.width = pct + '%';
+    if (lbl) lbl.textContent = done + ' / ' + ids.length;
+  }
+
+  closeModal();
+  await loadContributions();
+  toast(`Posted ${done - failed} contribution(s) to accounting${failed ? ' — ' + failed + ' failed' : ''}.`, failed ? 'error' : 'success');
 }
 
 function openContribForm(id) {
