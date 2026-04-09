@@ -607,9 +607,70 @@ tailwind.config = {
         <option value="reversed">Reversed</option>
       </select>
     </div>
-    <div class="flex gap-2">
+    <div class="flex gap-2 flex-wrap">
       <button class="btn-secondary text-xs" onclick="exportContribCSV()">Export CSV</button>
+      <button class="btn-secondary text-xs" onclick="downloadContribTemplate()">Download Template</button>
+      <button class="btn-gold text-xs role-entry-only" onclick="openContribImport()">Import Excel</button>
       <button class="btn-primary text-xs role-entry-only" onclick="openContribForm()">+ New Entry</button>
+    </div>
+  </div>
+
+  <!-- ── Contribution Excel Import Panel ── -->
+  <div id="contrib-import-panel" class="card p-5 mb-4" style="display:none;">
+    <div class="flex items-center justify-between mb-3">
+      <h3 class="font-semibold text-gray-800">Import Contributions from Excel / CSV</h3>
+      <button onclick="closeContribImport()" class="text-gray-400 hover:text-gray-600 text-xl font-bold">&times;</button>
+    </div>
+
+    <!-- Instructions -->
+    <div style="background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:8px;padding:10px 14px;margin-bottom:14px;">
+      <p class="text-xs font-semibold text-blue-800 mb-1">Required columns in your file (any order, headers must match exactly):</p>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-1 text-xs text-blue-700 font-mono">
+        <span>date</span><span>account_code</span><span>amount</span><span>contributor_name</span>
+        <span>envelope_number</span><span>district</span><span>description</span><span>ref_no</span>
+        <span>bank_account_code</span><span>contributor_phone</span><span>contributor_email</span><span>contributor_address</span>
+      </div>
+      <p class="text-xs text-blue-600 mt-2">Only <strong>date</strong>, <strong>account_code</strong>, and <strong>amount</strong> are required. All others are optional. Date format: <strong>YYYY-MM-DD</strong>. Download the template for a ready-to-fill example.</p>
+    </div>
+
+    <!-- File picker -->
+    <div class="flex items-center gap-3 mb-4">
+      <label class="btn-secondary text-xs cursor-pointer">
+        Choose File
+        <input type="file" id="contrib-import-file" accept=".xlsx,.xls,.csv" class="hidden" onchange="onContribFileChosen()">
+      </label>
+      <span id="contrib-import-filename" class="text-xs text-gray-500 italic">No file chosen</span>
+    </div>
+
+    <!-- Preview area -->
+    <div id="contrib-import-preview" style="display:none;">
+      <div class="flex items-center justify-between mb-2">
+        <span class="text-xs font-semibold text-gray-700" id="contrib-import-summary"></span>
+        <div class="flex gap-2">
+          <label class="flex items-center gap-1.5 text-xs font-medium cursor-pointer">
+            <input type="checkbox" id="contrib-import-post" class="rounded">
+            Post immediately after import
+          </label>
+        </div>
+      </div>
+      <div class="overflow-x-auto max-h-64 rounded border border-gray-200">
+        <table class="tbl text-xs" id="contrib-import-table">
+          <thead>
+            <tr>
+              <th>#</th><th>Date</th><th>Account</th><th>Contributor</th><th>Envelope</th>
+              <th>District</th><th>Description</th><th>Ref#</th><th class="text-right">Amount</th><th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="contrib-import-tbody"></tbody>
+        </table>
+      </div>
+      <div class="flex justify-between items-center mt-3">
+        <span class="text-xs text-gray-500" id="contrib-import-errors"></span>
+        <div class="flex gap-2">
+          <button class="btn-secondary text-xs" onclick="closeContribImport()">Cancel</button>
+          <button class="btn-primary text-xs" id="contrib-import-confirm-btn" onclick="confirmContribImport()">Import All Valid Rows</button>
+        </div>
+      </div>
     </div>
   </div>
   <div class="card overflow-hidden">
@@ -2423,6 +2484,209 @@ async function saveContrib(id, status) {
 }
 
 // ── Auto-create a double-entry journal for a posted contribution ──
+// ══════════════════════════════════════════════
+// CONTRIBUTION EXCEL IMPORT
+// ══════════════════════════════════════════════
+
+function downloadContribTemplate() {
+  if (typeof XLSX === 'undefined') { toast('XLSX library not loaded.','error'); return; }
+  const headers = ['date','account_code','amount','contributor_name','envelope_number','district','description','ref_no','bank_account_code','contributor_phone','contributor_email','contributor_address'];
+  const example = ['2026-01-15','4051','250.00','John Mensah','ENV-001','Toronto Central','Sunday Offering','REF001','1110','416-555-0100','john@example.com','123 Main St, Toronto ON'];
+  const ws = XLSX.utils.aoa_to_sheet([headers, example]);
+  // Column widths
+  ws['!cols'] = headers.map(h => ({ wch: Math.max(h.length + 2, 18) }));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Contributions');
+  XLSX.writeFile(wb, 'Contribution_Import_Template.xlsx');
+}
+
+let _contribImportRows = [];  // parsed valid rows ready to import
+
+function openContribImport() {
+  document.getElementById('contrib-import-panel').style.display = 'block';
+  document.getElementById('contrib-import-panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function closeContribImport() {
+  document.getElementById('contrib-import-panel').style.display = 'none';
+  document.getElementById('contrib-import-preview').style.display = 'none';
+  document.getElementById('contrib-import-filename').textContent = 'No file chosen';
+  document.getElementById('contrib-import-file').value = '';
+  _contribImportRows = [];
+}
+
+function onContribFileChosen() {
+  const input = document.getElementById('contrib-import-file');
+  const file  = input.files && input.files[0];
+  if (!file) return;
+  document.getElementById('contrib-import-filename').textContent = file.name;
+  const ext = file.name.split('.').pop().toLowerCase();
+  const reader = new FileReader();
+  if (ext === 'csv') {
+    reader.onload = e => { const wb = XLSX.read(e.target.result, {type:'string'}); processContribSheet(wb); };
+    reader.readAsText(file);
+  } else {
+    reader.onload = e => { const wb = XLSX.read(new Uint8Array(e.target.result), {type:'array'}); processContribSheet(wb); };
+    reader.readAsArrayBuffer(file);
+  }
+}
+
+function processContribSheet(wb) {
+  const ws   = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false });
+  if (!rows.length) { toast('File is empty.', 'error'); return; }
+
+  // Find header row (first row with 'date' or 'amount' in it)
+  let hIdx = 0;
+  for (let i = 0; i < Math.min(rows.length, 5); i++) {
+    const lower = rows[i].map(c => String(c).trim().toLowerCase());
+    if (lower.includes('date') || lower.includes('amount')) { hIdx = i; break; }
+  }
+
+  const headers = rows[hIdx].map(c => String(c).trim().toLowerCase());
+  const col = h => headers.indexOf(h);
+
+  const valid = [], errors = [];
+  for (let i = hIdx + 1; i < rows.length; i++) {
+    const r = rows[i];
+    const rawDate   = String(r[col('date')]||'').trim();
+    const acctCode  = String(r[col('account_code')]||'').trim();
+    const rawAmt    = String(r[col('amount')]||'').replace(/[$,]/g,'').trim();
+    const amount    = parseFloat(rawAmt);
+
+    // Skip blank rows
+    if (!rawDate && !acctCode && !rawAmt) continue;
+
+    const rowErrors = [];
+    // Validate date — accept YYYY-MM-DD or M/D/YYYY or Excel serial
+    let date = '';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(rawDate)) {
+      date = rawDate;
+    } else if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(rawDate)) {
+      const [m,d,y] = rawDate.split('/');
+      date = `${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
+    } else if (/^\d+$/.test(rawDate)) {
+      // Excel date serial
+      const jsDate = new Date(Math.round((parseInt(rawDate) - 25569) * 86400 * 1000));
+      date = jsDate.toISOString().slice(0,10);
+    } else {
+      rowErrors.push('Invalid date');
+    }
+    if (!acctCode) rowErrors.push('Missing account_code');
+    if (isNaN(amount) || amount <= 0) rowErrors.push('Invalid amount');
+
+    const bank_account_code = String(r[col('bank_account_code')]||'1110').trim() || '1110';
+
+    const row = {
+      _rowNum: i + 1,
+      _errors: rowErrors,
+      date,
+      account_code:        acctCode,
+      amount:              isNaN(amount) ? 0 : amount,
+      contributor_name:    String(r[col('contributor_name')]||'').trim(),
+      envelope_number:     String(r[col('envelope_number')]||'').trim(),
+      district:            String(r[col('district')]||'').trim(),
+      description:         String(r[col('description')]||'').trim(),
+      ref_no:              String(r[col('ref_no')]||'').trim(),
+      bank_account_code,
+      contributor_phone:   String(r[col('contributor_phone')]||'').trim(),
+      contributor_email:   String(r[col('contributor_email')]||'').trim(),
+      contributor_address: String(r[col('contributor_address')]||'').trim(),
+    };
+    if (rowErrors.length) errors.push(`Row ${row._rowNum}: ${rowErrors.join(', ')}`);
+    valid.push(row);
+  }
+
+  _contribImportRows = valid;
+  renderContribImportPreview(valid, errors);
+}
+
+function renderContribImportPreview(rows, errors) {
+  const validRows  = rows.filter(r => r._errors.length === 0);
+  const invalidRows = rows.filter(r => r._errors.length > 0);
+  const grandTotal = validRows.reduce((s,r) => s + r.amount, 0);
+
+  document.getElementById('contrib-import-summary').textContent =
+    `${rows.length} row(s) found — ${validRows.length} valid, ${invalidRows.length} with errors. Total: ${fmt(grandTotal)}`;
+
+  const tbody = document.getElementById('contrib-import-tbody');
+  tbody.innerHTML = rows.map((r, i) => {
+    const acct = coaCache.find(a => a.code === r.account_code);
+    const acctName = acct ? r.account_code + ' – ' + acct.name : (r.account_code || '—');
+    const isErr = r._errors.length > 0;
+    const bg = isErr ? 'background:#fef2f2;' : (i%2===0?'':'background:#f9fafb;');
+    return `<tr style="${bg}">
+      <td class="text-gray-400">${r._rowNum}</td>
+      <td>${r.date||'<span class="text-red-500">—</span>'}</td>
+      <td class="text-xs">${acctName}</td>
+      <td>${r.contributor_name||'—'}</td>
+      <td class="text-xs">${r.envelope_number||'—'}</td>
+      <td class="text-xs">${r.district||'—'}</td>
+      <td class="text-xs">${r.description||'—'}</td>
+      <td class="text-xs font-mono">${r.ref_no||'—'}</td>
+      <td class="text-right font-semibold">${r.amount>0?fmt(r.amount):'<span class="text-red-500">'+r.amount+'</span>'}</td>
+      <td>${isErr ? '<span class="text-xs text-red-600 font-semibold">⚠ '+r._errors.join('; ')+'</span>' : '<span class="text-xs text-green-700">✓ OK</span>'}</td>
+    </tr>`;
+  }).join('');
+
+  const errEl = document.getElementById('contrib-import-errors');
+  errEl.textContent = invalidRows.length ? `${invalidRows.length} row(s) will be skipped due to errors.` : '';
+  errEl.style.color = '#dc2626';
+
+  document.getElementById('contrib-import-confirm-btn').disabled = validRows.length === 0;
+  document.getElementById('contrib-import-preview').style.display = 'block';
+}
+
+async function confirmContribImport() {
+  const postImmediately = document.getElementById('contrib-import-post').checked;
+  const validRows = _contribImportRows.filter(r => r._errors.length === 0);
+  if (!validRows.length) { toast('No valid rows to import.', 'error'); return; }
+
+  const btn = document.getElementById('contrib-import-confirm-btn');
+  btn.disabled = true;
+  btn.textContent = 'Importing…';
+
+  const uid = myId();
+  let imported = 0, failed = 0;
+
+  for (const r of validRows) {
+    const payload = {
+      date:                r.date,
+      account_code:        r.account_code,
+      bank_account_code:   r.bank_account_code || '1110',
+      amount:              r.amount,
+      contributor_name:    r.contributor_name  || null,
+      envelope_number:     r.envelope_number   || null,
+      district:            r.district          || null,
+      description:         r.description       || null,
+      ref_no:              r.ref_no             || null,
+      contributor_phone:   r.contributor_phone  || null,
+      contributor_email:   r.contributor_email  || null,
+      contributor_address: r.contributor_address|| null,
+      status:              postImmediately ? 'posted' : 'draft',
+      entered_by:          uid,
+    };
+    if (postImmediately) { payload.posted_at = new Date().toISOString(); payload.posted_by = uid; }
+
+    const { data: ins, error } = await sb.from('contributions').insert(payload).select('id').single();
+    if (error) { failed++; continue; }
+    imported++;
+
+    // Create journal for posted contributions
+    if (postImmediately && ins?.id) {
+      const jnlId = await createContribJournal({ ...payload, id: ins.id });
+      if (jnlId) await sb.from('contributions').update({ journal_id: jnlId }).eq('id', ins.id);
+    }
+  }
+
+  btn.textContent = 'Import All Valid Rows';
+  btn.disabled = false;
+
+  toast(`Imported ${imported} contribution(s)${failed ? ' — '+failed+' failed' : ''}.`, failed ? 'error' : 'success');
+  closeContribImport();
+  await loadContributions();
+}
+
 async function createContribJournal(contrib) {
   const bankCode = contrib.bank_account_code || '1110';
   const incomeCode = contrib.account_code;
