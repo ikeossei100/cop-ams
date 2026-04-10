@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>COP AMS — Church of Pentecost Accounting</title>
 <script src="https://cdn.tailwindcss.com"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.50.0/dist/umd/supabase.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -1342,7 +1342,19 @@ Login at: </textarea>
 // ══════════════════════════════════════════════
 const SUPABASE_URL = 'https://idwdbwyzucywagrijeer.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_QfYTnehPat9zCID_AHezXQ_w10y0sEU';
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+let sb;
+try {
+  sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+} catch(e) {
+  console.error('Supabase init failed:', e);
+  document.addEventListener('DOMContentLoaded', () => {
+    const el = document.getElementById('supabase-status');
+    if (el) {
+      el.textContent = '⚠ Failed to initialise database connection. Please hard-refresh the page (Ctrl+Shift+R).';
+      el.style.cssText = 'background:#fef2f2;color:#b91c1c;border:1px solid #fecaca;display:block;font-weight:600;';
+    }
+  });
+}
 
 let currentUser = null;
 let currentProfile = null;
@@ -1409,6 +1421,11 @@ async function authLogin() {
   const errEl = document.getElementById('auth-error');
   errEl.classList.add('hidden');
   document.getElementById('auth-lockout').classList.add('hidden');
+  if (!sb) {
+    errEl.textContent = 'Database not connected. Please hard-refresh the page (Ctrl+Shift+R) and try again.';
+    errEl.classList.remove('hidden');
+    return;
+  }
   if (!email || !password) { errEl.textContent = 'Please enter email and password.'; errEl.classList.remove('hidden'); return; }
   if (checkLockout(email)) return;
   try {
