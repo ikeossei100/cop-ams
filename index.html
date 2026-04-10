@@ -1421,8 +1421,8 @@ async function authLogin() {
     clearAttempts(email);
     currentUser = data.user;
     await loadProfile();
-    // Block unapproved accounts
-    if (currentProfile?.is_approved === false) {
+    // Block only if is_approved is explicitly false AND not admin
+    if (currentProfile?.is_approved === false && currentProfile?.role !== 'admin') {
       await sb.auth.signOut();
       currentUser = null; currentProfile = null; _districtUids = null;
       errEl.textContent = 'Your account is pending approval by an administrator. Please check back later.';
@@ -1514,10 +1514,11 @@ async function authRegister() {
     const uid = data.user?.id;
     if (uid) {
       // 2. Create profile row — is_approved: false until admin approves
-      await sb.from('profiles').upsert({
-        id: uid, full_name: name, role, district: district||null,
-        is_active: true, is_approved: false, failed_attempts: 0
-      }, { onConflict: 'id' });
+      // is_approved defaults to false — run the Supabase SQL migration first:
+      // ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS is_approved BOOLEAN DEFAULT FALSE;
+      const profileData = { id: uid, full_name: name, role, district: district||null, is_active: true, failed_attempts: 0 };
+      try { Object.assign(profileData, { is_approved: false }); } catch(e) {}
+      await sb.from('profiles').upsert(profileData, { onConflict: 'id' });
     }
 
     okEl.textContent = 'Account created! Your account is pending approval by an administrator. You will be notified when access is granted.';
@@ -1627,8 +1628,8 @@ async function checkSession() {
   if (session) {
     currentUser = session.user;
     await loadProfile();
-    // Block access if account is pending admin approval
-    if (currentProfile?.is_approved === false) {
+    // Block only if is_approved is explicitly false AND not admin
+    if (currentProfile?.is_approved === false && currentProfile?.role !== 'admin') {
       await sb.auth.signOut();
       currentUser = null; currentProfile = null; _districtUids = null;
       const errEl = document.getElementById('auth-error');
