@@ -857,6 +857,15 @@ tailwind.config = {
       <div class="font-semibold text-sm text-gray-700">Journal Report</div>
       <div class="text-xs text-gray-400 mt-1">All journal entries by date</div>
     </div>
+    <div class="card p-4 cursor-pointer hover:border-[#0284c7] hover:border-2 transition-colors md:col-span-4" onclick="runReport('national-summary')" style="border:2px solid #0284c7;background:linear-gradient(135deg,#f0f9ff,#e0f2fe);">
+      <div class="flex items-center gap-3">
+        <span style="font-size:2rem;">🇨🇦</span>
+        <div>
+          <div class="font-bold text-sm" style="color:#1a3c8f;">National Offering Summary — All Districts</div>
+          <div class="text-xs text-gray-500 mt-0.5">Tithes &amp; Offering · Missionary Offering · McKeown's Week · Easter Convention · Christmas Convention — combined totals across all districts</div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- Report filters -->
@@ -886,23 +895,29 @@ tailwind.config = {
           <select id="rpt-account" class="form-input w-56" style="display:none;"></select>
         </div>
       </div>
-      <div id="rpt-contributor-wrapper" style="display:none;" class="flex flex-wrap gap-3 items-end">
-        <div>
-          <label class="form-label">Contributor Name</label>
-          <div class="relative">
-            <input type="text" id="rpt-contributor" class="form-input w-52" placeholder="Type name to search…" oninput="filterContributorSuggestions()" autocomplete="off">
-            <div id="contributor-suggestions" class="absolute z-50 bg-white border border-gray-200 rounded-lg shadow-lg w-52 max-h-48 overflow-y-auto" style="display:none; top:100%; left:0;"></div>
+      <div id="rpt-contributor-wrapper" style="display:none;">
+        <div style="background:#f0f6ff;border:1.5px solid #bfdbfe;border-radius:10px;padding:12px 16px;">
+          <p class="text-xs font-semibold text-blue-800 mb-2" style="letter-spacing:0.04em;">SEARCH CONTRIBUTOR — fill any one field</p>
+          <div class="flex flex-wrap gap-3 items-end">
+            <div>
+              <label class="form-label">Envelope No</label>
+              <input type="text" id="rpt-contributor-env" class="form-input" style="width:130px;font-weight:600;" placeholder="e.g. ENV-001" autocomplete="off">
+            </div>
+            <div style="display:flex;align-items:flex-end;padding-bottom:6px;color:#94a3b8;font-size:12px;font-weight:600;">OR</div>
+            <div>
+              <label class="form-label">Contributor Name</label>
+              <div class="relative">
+                <input type="text" id="rpt-contributor" class="form-input" style="width:210px;" placeholder="Type name to search…" oninput="filterContributorSuggestions()" autocomplete="off">
+                <div id="contributor-suggestions" class="absolute z-50 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto" style="display:none;top:100%;left:0;width:210px;"></div>
+              </div>
+            </div>
+            <div style="display:flex;align-items:flex-end;padding-bottom:6px;color:#94a3b8;font-size:12px;font-weight:600;">OR</div>
+            <div>
+              <label class="form-label">Phone Number</label>
+              <input type="text" id="rpt-contributor-phone" class="form-input" style="width:150px;" placeholder="e.g. 416-555-0100" autocomplete="off">
+            </div>
           </div>
         </div>
-        <div>
-          <label class="form-label">Envelope No</label>
-          <input type="text" id="rpt-contributor-env" class="form-input w-32" placeholder="e.g. ENV-001" autocomplete="off">
-        </div>
-        <div>
-          <label class="form-label">Phone</label>
-          <input type="text" id="rpt-contributor-phone" class="form-input w-36" placeholder="e.g. 416-555-0100" autocomplete="off">
-        </div>
-        <p class="text-xs text-gray-400 self-end pb-1">Fill any one field to search</p>
       </div>
       <div id="rpt-user-wrapper" style="display:none;">
         <label class="form-label">Filter by User</label>
@@ -3910,6 +3925,7 @@ async function generateReport() {
     else if(activeReport==='cash-flow') await genCashFlow(from,to);
     else if(activeReport==='contributor-statement') await genContributorStatement(from,to);
     else if(activeReport==='journal-report') await genJournalReport(from,to);
+    else if(activeReport==='national-summary') await genNationalSummary(from,to);
   } catch(e){ content.innerHTML=`<p class="text-red-600">Error: ${e.message}</p>`; }
 }
 
@@ -4220,6 +4236,140 @@ async function genBalanceSheet(from,to) {
     '</div>' : '');
 }
 
+// ── National Offering Summary ─────────────────────────────────────────────
+// Summarises the 5 key offering categories across ALL districts (no user filter).
+// District breakdown is shown per category.
+async function genNationalSummary(from, to) {
+  const content = document.getElementById('report-content');
+  content.innerHTML = '<div class="text-center text-gray-400 py-8">Loading national summary…</div>';
+
+  // Always fetch ALL data regardless of current user — this is a national report
+  const [jnlRes, conRes] = await Promise.all([
+    sb.from('journals').select('*').eq('status','posted').gte('date',from).lte('date',to),
+    sb.from('contributions').select('*').eq('status','posted').gte('date',from).lte('date',to)
+  ]);
+  const journals = jnlRes.data || [];
+  const contribs = conRes.data || [];
+
+  // District accounts (4051–4088): Tithes & Offering per district
+  const districtCodes = coaCache
+    .filter(a => a.parent_code === '4050' && a.type === 'Detail' && a.active !== false)
+    .sort((a,b) => (a.sort_order||0)-(b.sort_order||0));
+
+  // The 5 summary categories
+  const CATEGORIES = [
+    { key:'tithes',   label:'Tithes & Offering',          codes: districtCodes.map(a=>a.code), perDistrict: true },
+    { key:'mission',  label:'Missionary Offering',         codes: ['4421'], perDistrict: false },
+    { key:'mckeown',  label:"McKeown's Week Offering",     codes: ['4422'], perDistrict: false },
+    { key:'easter',   label:'Easter Convention Offering',  codes: ['4102'], perDistrict: false },
+    { key:'xmas',     label:'Christmas Convention Offering',codes: ['4105'], perDistrict: false },
+  ];
+
+  // Build totals from journals + contributions
+  const accountTotals = {}; // code → amount (CR is positive for income)
+  journals.forEach(j => (j.lines||[]).forEach(l => {
+    const amt = parseFloat(l.amount) || 0;
+    accountTotals[l.account_code] = (accountTotals[l.account_code]||0) + (l.dc==='CR' ? amt : -amt);
+  }));
+  contribs.forEach(c => {
+    const amt = parseFloat(c.amount) || 0;
+    accountTotals[c.account_code] = (accountTotals[c.account_code]||0) + amt;
+  });
+
+  const fmt2 = n => '$' + Math.max(0,n).toLocaleString('en-CA',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const fmtDate = d => new Date(d+'T00:00:00').toLocaleDateString('en-CA',{year:'numeric',month:'long',day:'numeric'});
+
+  let grandTotal = 0;
+  let sectionsHtml = '';
+
+  CATEGORIES.forEach(cat => {
+    const catTotal = cat.codes.reduce((s,c) => s + Math.max(0, accountTotals[c]||0), 0);
+    grandTotal += catTotal;
+
+    let rowsHtml = '';
+    if (cat.perDistrict) {
+      // Show each district that has a non-zero amount
+      const distRows = districtCodes
+        .map(a => ({ name: a.name, code: a.code, amt: Math.max(0, accountTotals[a.code]||0) }))
+        .filter(r => r.amt > 0)
+        .sort((a,b) => b.amt - a.amt);
+
+      if (distRows.length === 0) {
+        rowsHtml = `<tr><td colspan="3" class="text-center text-gray-400 text-xs py-2">No contributions recorded in this period.</td></tr>`;
+      } else {
+        rowsHtml = distRows.map((r,i) => `<tr style="${i%2===0?'':'background:#f9fafb;}">
+          <td class="text-xs text-gray-500 w-16">${r.code}</td>
+          <td class="text-sm">${r.name}</td>
+          <td class="text-right font-semibold">${fmt2(r.amt)}</td>
+        </tr>`).join('');
+      }
+    } else {
+      const code = cat.codes[0];
+      const acct = coaCache.find(a => a.code === code);
+      const amt  = Math.max(0, accountTotals[code]||0);
+      rowsHtml = `<tr>
+        <td class="text-xs text-gray-500 w-16">${code}</td>
+        <td class="text-sm">${acct?.name||cat.label}</td>
+        <td class="text-right font-semibold">${fmt2(amt)}</td>
+      </tr>`;
+    }
+
+    sectionsHtml += `
+      <div class="mb-6">
+        <div class="flex justify-between items-center px-3 py-2 rounded-t-lg" style="background:#1a3c8f;color:white;">
+          <span class="font-bold text-sm">${cat.label}</span>
+          <span class="font-bold text-sm">${fmt2(catTotal)}</span>
+        </div>
+        <div class="border border-gray-200 rounded-b-lg overflow-hidden">
+          <table style="width:100%;border-collapse:collapse;">
+            <thead><tr style="background:#f1f5f9;">
+              <th style="padding:6px 10px;text-align:left;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.06em;width:60px;">Code</th>
+              <th style="padding:6px 10px;text-align:left;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.06em;">District / Account</th>
+              <th style="padding:6px 10px;text-align:right;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.06em;">Amount (CAD)</th>
+            </tr></thead>
+            <tbody>${rowsHtml}</tbody>
+          </table>
+        </div>
+      </div>`;
+  });
+
+  content.innerHTML = `
+    <!-- Header -->
+    <div style="border-bottom:3px solid #1a3c8f;padding-bottom:14px;margin-bottom:22px;">
+      <div class="flex justify-between items-start flex-wrap gap-2">
+        <div>
+          <div class="font-display font-bold" style="font-size:1.2rem;color:#1a3c8f;letter-spacing:-0.02em;">Church of Pentecost Canada Inc</div>
+          <div class="font-bold text-gray-700 text-sm mt-0.5">National Offering Summary — All Districts Combined</div>
+        </div>
+        <div class="text-right text-xs text-gray-400">
+          <div>Period: <strong class="text-gray-700">${fmtDate(from)}</strong> — <strong class="text-gray-700">${fmtDate(to)}</strong></div>
+          <div class="mt-0.5">Generated: ${new Date().toLocaleDateString('en-CA',{year:'numeric',month:'long',day:'numeric'})}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Summary stat cards -->
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
+      ${CATEGORIES.map(cat => {
+        const amt = cat.codes.reduce((s,c) => s + Math.max(0, accountTotals[c]||0), 0);
+        return `<div class="card p-3" style="border-left:4px solid #0284c7;">
+          <div class="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-1" style="font-size:9px;">${cat.label}</div>
+          <div class="font-bold text-gray-800" style="font-size:1rem;">${fmt2(amt)}</div>
+        </div>`;
+      }).join('')}
+    </div>
+
+    <!-- Per-category breakdown -->
+    ${sectionsHtml}
+
+    <!-- Grand Total -->
+    <div class="flex justify-between items-center px-5 py-4 rounded-xl mt-2" style="background:linear-gradient(135deg,#1a3c8f,#0284c7);color:white;">
+      <span class="font-bold" style="font-size:1rem;letter-spacing:0.02em;">GRAND TOTAL — ALL OFFERINGS</span>
+      <span class="font-bold" style="font-size:1.3rem;">${fmt2(grandTotal)}</span>
+    </div>
+    <p class="text-xs text-gray-400 mt-3 italic text-right">Includes all posted contributions and journal entries. Generated: ${new Date().toLocaleString('en-CA')}.</p>`;
+}
+
 async function genContribDistribution(from,to) {
   const {data,error}=await reportUserFilter(sb.from('contributions').select('*').eq('status','posted').gte('date',from).lte('date',to).order('date',{ascending:true}));
   if(error){toast('Error: '+error.message,'error');return;}
@@ -4308,52 +4458,74 @@ async function genContributorStatement(from,to) {
   const grandTotal=list.reduce((s,c)=>s+(parseFloat(c.amount)||0),0);
   const rows=list.map((c,i)=>{
     const a=coaCache.find(x=>x.code===c.account_code);
-    return `<tr>
-      <td class="text-center">${i+1}</td>
-      <td>${c.date}</td>
-      <td>${c.ref_no||'—'}</td>
-      <td>${a?a.name:(c.account_code||'—')}</td>
-      <td>${c.description||'—'}</td>
-      <td>${c.district||'—'}</td>
+    const rowBg = i%2===0 ? '' : 'style="background:#f9fafb;"';
+    return `<tr ${rowBg}>
+      <td class="text-center text-gray-400 text-xs">${i+1}</td>
+      <td class="text-xs">${new Date(c.date+'T00:00:00').toLocaleDateString('en-CA',{year:'numeric',month:'short',day:'numeric'})}</td>
+      <td class="text-xs font-mono text-gray-500">${c.ref_no||'—'}</td>
+      <td class="text-xs">${a?a.name:(c.account_code||'—')}</td>
+      <td class="text-xs text-gray-600">${c.description||'—'}</td>
       <td class="text-right font-semibold">${fmt(parseFloat(c.amount)||0)}</td>
     </tr>`;
   }).join('');
+  const fmtDate = d => new Date(d+'T00:00:00').toLocaleDateString('en-CA',{year:'numeric',month:'long',day:'numeric'});
   document.getElementById('report-content').innerHTML=`
-    <h2 class="font-display text-lg font-bold mb-1" style="color:#1a3c8f;">Contributor Statement</h2>
-    <p class="text-xs text-gray-500 mb-4">Period: ${from} to ${to}</p>
-
-    <!-- Contributor details box -->
-    <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-5 grid md:grid-cols-2 gap-3 text-sm" id="stmt-contributor-box">
-      <div>
-        <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Contributor</p>
-        <p class="font-bold text-gray-800 text-base">${first.contributor_name||name}</p>
-        ${first.envelope_number
-          ? `<p class="text-sm font-bold mt-1" style="color:#1a3c8f;">Envelope No: ${first.envelope_number}</p>`
-          : '<p class="text-xs text-gray-400 mt-0.5 italic">No envelope number assigned</p>'}
-        ${first.contributor_address?`<p class="text-gray-600 mt-1">${first.contributor_address.replace(/\n/g,'<br>')}</p>`:''}
-      </div>
-      <div>
-        ${first.contributor_phone?`<p class="text-gray-600"><span class="font-medium">Phone:</span> ${first.contributor_phone}</p>`:''}
-        ${first.contributor_email?`<p class="text-gray-600"><span class="font-medium">Email:</span> ${first.contributor_email}</p>`:''}
-        ${first.district?`<p class="text-gray-600"><span class="font-medium">District:</span> ${first.district}</p>`:''}
+    <!-- Statement header -->
+    <div style="border-bottom:3px solid #1a3c8f;padding-bottom:14px;margin-bottom:20px;">
+      <div class="flex justify-between items-start flex-wrap gap-2">
+        <div>
+          <div class="font-display font-bold" style="font-size:1.25rem;color:#1a3c8f;letter-spacing:-0.02em;">Church of Pentecost Canada Inc</div>
+          <div class="font-semibold text-gray-500 text-sm mt-0.5">Contributor Statement</div>
+        </div>
+        <div class="text-right text-xs text-gray-400">
+          <div>Period: <strong class="text-gray-700">${fmtDate(from)}</strong> — <strong class="text-gray-700">${fmtDate(to)}</strong></div>
+          <div class="mt-0.5">Generated: ${new Date().toLocaleDateString('en-CA',{year:'numeric',month:'long',day:'numeric'})}</div>
+        </div>
       </div>
     </div>
 
+    <!-- Contributor identity card -->
+    <div style="background:linear-gradient(135deg,#1a3c8f 0%,#0284c7 100%);border-radius:12px;padding:20px 24px;margin-bottom:20px;color:white;" id="stmt-contributor-box">
+      <div class="flex justify-between items-start flex-wrap gap-4">
+        <div>
+          <div style="font-size:10px;font-weight:700;letter-spacing:0.1em;opacity:0.7;margin-bottom:4px;">CONTRIBUTOR</div>
+          <div style="font-size:1.35rem;font-weight:800;letter-spacing:-0.01em;">${first.contributor_name||name}</div>
+          ${first.contributor_address?`<div style="opacity:0.8;font-size:0.8rem;margin-top:4px;">${first.contributor_address.replace(/\n/g,', ')}</div>`:''}
+          ${first.district?`<div style="opacity:0.75;font-size:0.78rem;margin-top:2px;">District: ${first.district}</div>`:''}
+        </div>
+        <div style="text-align:right;">
+          ${first.envelope_number?`
+            <div style="background:rgba(255,255,255,0.15);border:1.5px solid rgba(255,255,255,0.4);border-radius:8px;padding:8px 16px;display:inline-block;margin-bottom:8px;">
+              <div style="font-size:9px;font-weight:700;letter-spacing:0.12em;opacity:0.75;margin-bottom:2px;">ENVELOPE NO.</div>
+              <div style="font-size:1.4rem;font-weight:900;letter-spacing:0.04em;">${first.envelope_number}</div>
+            </div>` : ''}
+          ${first.contributor_phone?`<div style="font-size:0.8rem;opacity:0.85;">📞 ${first.contributor_phone}</div>`:''}
+          ${first.contributor_email?`<div style="font-size:0.78rem;opacity:0.75;">✉ ${first.contributor_email}</div>`:''}
+        </div>
+      </div>
+    </div>
+
+    <!-- Transactions table -->
     <div class="overflow-x-auto">
     <table class="tbl">
       <thead><tr>
-        <th class="text-center w-8">#</th><th>Date</th><th>Ref#</th><th>Fund / Account</th><th>Description</th><th>District</th><th class="text-right">Amount (CAD)</th>
+        <th class="text-center" style="width:36px;">#</th>
+        <th>Date</th>
+        <th>Ref #</th>
+        <th>Fund / Account</th>
+        <th>Description</th>
+        <th class="text-right">Amount (CAD)</th>
       </tr></thead>
-      <tbody>${rows||'<tr><td colspan="7" class="text-center py-4 text-gray-400">No posted contributions in period.</td></tr>'}</tbody>
+      <tbody>${rows||'<tr><td colspan="6" class="text-center py-6 text-gray-400">No posted contributions found in this period.</td></tr>'}</tbody>
       <tfoot>
-        <tr class="font-bold bg-gray-50">
-          <td colspan="6" class="text-right">Total Contributions</td>
-          <td class="text-right text-base">${fmt(grandTotal)}</td>
+        <tr style="background:#1a3c8f;color:white;">
+          <td colspan="5" class="text-right font-bold" style="padding:10px 14px;font-size:0.85rem;letter-spacing:0.02em;">TOTAL CONTRIBUTIONS</td>
+          <td class="text-right font-bold" style="padding:10px 14px;font-size:1rem;">${fmt(grandTotal)}</td>
         </tr>
       </tfoot>
     </table>
     </div>
-    <p class="text-xs text-gray-400 mt-4 italic">This statement reflects posted contributions only. Generated: ${new Date().toLocaleString('en-CA')}.</p>`;
+    <p class="text-xs text-gray-400 mt-4 italic text-right">This statement reflects posted contributions only.</p>`;
 }
 
 async function openAllStatementsSelector() {
