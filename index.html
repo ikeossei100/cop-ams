@@ -291,7 +291,8 @@ tailwind.config = {
         <p class="text-xs text-center" style="color:#94a3b8;">After creating your account, sign in with your email and password.</p>
       </div>
 
-      <p class="text-center text-xs mt-6" style="color:#94a3b8;">COP AMS v1.0 &mdash; Canada Inc &middot; General Fund</p>
+      <div id="supabase-status" class="hidden mt-4 p-2 rounded-lg text-xs text-center"></div>
+      <p class="text-center text-xs mt-4" style="color:#94a3b8;">COP AMS v1.0 &mdash; Canada Inc &middot; General Fund</p>
     </div>
   </div>
 </div>
@@ -1414,13 +1415,22 @@ async function authLogin() {
     const { data, error } = await sb.auth.signInWithPassword({ email, password });
     if (error) {
       recordFailedAttempt(email);
-      errEl.textContent = error.message || 'Invalid email or password.';
+      let msg = error.message || 'Invalid email or password.';
+      // Friendly messages for common errors
+      if (msg.toLowerCase().includes('invalid login') || msg.toLowerCase().includes('invalid credentials')) {
+        msg = 'Incorrect email or password. Please try again. Use "Forgot your password?" to reset.';
+      } else if (msg.toLowerCase().includes('email not confirmed')) {
+        msg = 'Your email address has not been confirmed. Go to Supabase → Authentication → Settings and disable "Email confirmations", then try again.';
+      } else if (msg.toLowerCase().includes('failed to fetch') || msg.toLowerCase().includes('networkerror') || msg.toLowerCase().includes('network')) {
+        msg = 'Cannot reach the server. Check your internet connection. If the problem persists, the database may be paused — visit supabase.com to restore the project.';
+      }
+      errEl.textContent = msg;
       errEl.classList.remove('hidden');
       return;
     }
     clearAttempts(email);
     currentUser = data.user;
-    await loadProfile();
+    try { await loadProfile(); } catch(pe) { console.warn('Profile load error:', pe); }
     // Block only if is_approved is explicitly false AND not admin
     if (currentProfile?.is_approved === false && currentProfile?.role !== 'admin') {
       await sb.auth.signOut();
@@ -1431,7 +1441,11 @@ async function authLogin() {
     }
     startApp();
   } catch(e) {
-    errEl.textContent = 'Connection error. Check your internet connection.';
+    let msg = e?.message || String(e);
+    if (msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('network')) {
+      msg = 'Cannot reach the server. Check your internet connection. If the problem persists, the Supabase project may be paused — visit supabase.com to restore it.';
+    }
+    errEl.textContent = 'Error: ' + msg;
     errEl.classList.remove('hidden');
   }
 }
@@ -1624,22 +1638,27 @@ setInterval(async () => {
 }, 5 * 60 * 1000);
 
 async function checkSession() {
-  const { data: { session } } = await sb.auth.getSession();
-  if (session) {
-    currentUser = session.user;
-    await loadProfile();
-    // Block only if is_approved is explicitly false AND not admin
-    if (currentProfile?.is_approved === false && currentProfile?.role !== 'admin') {
-      await sb.auth.signOut();
-      currentUser = null; currentProfile = null; _districtUids = null;
-      const errEl = document.getElementById('auth-error');
-      if (errEl) {
-        errEl.textContent = 'Your account is pending approval by an administrator. Please check back later.';
-        errEl.classList.remove('hidden');
+  try {
+    const { data: { session } } = await sb.auth.getSession();
+    if (session) {
+      currentUser = session.user;
+      try { await loadProfile(); } catch(pe) { console.warn('Profile load error in checkSession:', pe); }
+      // Block only if is_approved is explicitly false AND not admin
+      if (currentProfile?.is_approved === false && currentProfile?.role !== 'admin') {
+        await sb.auth.signOut();
+        currentUser = null; currentProfile = null; _districtUids = null;
+        const errEl = document.getElementById('auth-error');
+        if (errEl) {
+          errEl.textContent = 'Your account is pending approval by an administrator. Please check back later.';
+          errEl.classList.remove('hidden');
+        }
+        return;
       }
-      return;
+      startApp();
     }
-    startApp();
+  } catch(e) {
+    console.warn('checkSession error:', e);
+    // Don't block the login screen — just show it
   }
 }
 
@@ -7777,6 +7796,29 @@ async function loadDashboard() {
 // ══════════════════════════════════════════════
 document.getElementById('auth-password').addEventListener('keydown', e => { if(e.key==='Enter') authLogin(); });
 document.addEventListener('DOMContentLoaded', () => {
+  // Test Supabase connectivity on page load
+  (async () => {
+    const statusEl = document.getElementById('supabase-status');
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/`, { headers: { apikey: SUPABASE_ANON_KEY } });
+      if (res.ok || res.status === 400) {
+        // 400 is fine — it means Supabase is reachable but we hit root with no query
+        if (statusEl) {
+          statusEl.textContent = '✓ Connected to database';
+          statusEl.style.cssText = 'background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0;display:block;';
+          setTimeout(() => statusEl.style.display = 'none', 3000);
+        }
+      } else {
+        throw new Error(`HTTP ${res.status}`);
+      }
+    } catch(e) {
+      if (statusEl) {
+        statusEl.textContent = '⚠ Cannot reach database. Check internet connection or restore the Supabase project at supabase.com.';
+        statusEl.style.cssText = 'background:#fef2f2;color:#b91c1c;border:1px solid #fecaca;display:block;font-weight:600;';
+      }
+    }
+  })();
+
   // Detect Supabase password-recovery redirect (URL contains #access_token + type=recovery)
   const hash = window.location.hash;
   if (hash.includes('type=recovery') && hash.includes('access_token')) {
