@@ -4274,8 +4274,164 @@ async function genBalanceSheet(from,to) {
 }
 
 // ── National Offering Summary ─────────────────────────────────────────────
-// Summarises the 5 key offering categories across ALL districts (no user filter).
-// District breakdown is shown per category.
+let _nationalCache = null; // stored for PDF/Excel export
+
+async function exportNationalPDF() {
+  if (!_nationalCache) { toast('Generate the report first.', 'error'); return; }
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const { from, to, categories, grandTotal } = _nationalCache;
+  const fmt2 = n => '$' + Math.max(0,n).toLocaleString('en-CA',{minimumFractionDigits:2,maximumFractionDigits:2});
+
+  // Header
+  doc.setFillColor(26,60,143);
+  doc.rect(0,0,210,22,'F');
+  doc.setTextColor(255,255,255);
+  doc.setFontSize(13); doc.setFont('helvetica','bold');
+  doc.text('Church of Pentecost Canada Inc', 14, 10);
+  doc.setFontSize(9); doc.setFont('helvetica','normal');
+  doc.text('National Offering Summary — All Districts Combined', 14, 17);
+  doc.setTextColor(100,100,100);
+  doc.setFontSize(8);
+  doc.text(`Period: ${from} to ${to}   |   Generated: ${new Date().toLocaleDateString('en-CA')}`, 14, 28);
+
+  let y = 34;
+
+  categories.forEach(cat => {
+    // Category header bar
+    doc.setFillColor(26,60,143);
+    doc.rect(14, y, 182, 7, 'F');
+    doc.setTextColor(255,255,255);
+    doc.setFontSize(9); doc.setFont('helvetica','bold');
+    doc.text(cat.label, 17, y+5);
+    doc.text(fmt2(cat.total), 196, y+5, { align:'right' });
+    y += 7;
+
+    const tableRows = cat.rows.map((r,i) => [r.code, r.name, fmt2(r.amt)]);
+    doc.autoTable({
+      startY: y,
+      head: [['Code','District / Account','Amount (CAD)']],
+      body: tableRows,
+      theme: 'grid',
+      headStyles: { fillColor:[241,245,249], textColor:[100,116,139], fontSize:7, fontStyle:'bold' },
+      bodyStyles: { fontSize:8, textColor:[30,41,59] },
+      columnStyles: { 0:{cellWidth:22}, 2:{halign:'right', cellWidth:36} },
+      margin: { left:14, right:14 },
+      alternateRowStyles: { fillColor:[249,250,251] },
+    });
+    y = doc.lastAutoTable.finalY + 6;
+    if (y > 260) { doc.addPage(); y = 14; }
+  });
+
+  // Grand total bar
+  doc.setFillColor(26,60,143);
+  doc.rect(14, y, 182, 10, 'F');
+  doc.setTextColor(255,255,255);
+  doc.setFontSize(10); doc.setFont('helvetica','bold');
+  doc.text('GRAND TOTAL — ALL OFFERINGS', 17, y+7);
+  doc.text(fmt2(grandTotal), 196, y+7, { align:'right' });
+
+  doc.save(`National_Offering_Summary_${from}_${to}.pdf`);
+}
+
+async function exportNationalExcel() {
+  if (!_nationalCache) { toast('Generate the report first.', 'error'); return; }
+  const { from, to, categories, grandTotal } = _nationalCache;
+  const fmt2 = n => '$' + Math.max(0,n).toLocaleString('en-CA',{minimumFractionDigits:2,maximumFractionDigits:2});
+
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'COP AMS';
+  const ws = wb.addWorksheet('National Offering Summary');
+
+  // Title rows
+  ws.mergeCells('A1:C1');
+  ws.getCell('A1').value = 'Church of Pentecost Canada Inc';
+  ws.getCell('A1').font = { bold:true, size:14, color:{argb:'FF1A3C8F'} };
+  ws.mergeCells('A2:C2');
+  ws.getCell('A2').value = 'National Offering Summary — All Districts Combined';
+  ws.getCell('A2').font = { bold:true, size:11 };
+  ws.mergeCells('A3:C3');
+  ws.getCell('A3').value = `Period: ${from} to ${to}   |   Generated: ${new Date().toLocaleDateString('en-CA')}`;
+  ws.getCell('A3').font = { size:9, color:{argb:'FF64748B'} };
+
+  ws.getColumn('A').width = 14;
+  ws.getColumn('B').width = 42;
+  ws.getColumn('C').width = 20;
+
+  let rowNum = 5;
+
+  categories.forEach(cat => {
+    // Category header
+    const hdr = ws.getRow(rowNum);
+    hdr.getCell(1).value = cat.label;
+    hdr.getCell(3).value = cat.total;
+    hdr.getCell(3).numFmt = '"$"#,##0.00';
+    ['A','B','C'].forEach(col => {
+      ws.getCell(`${col}${rowNum}`).fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FF1A3C8F'} };
+      ws.getCell(`${col}${rowNum}`).font = { bold:true, color:{argb:'FFFFFFFF'} };
+    });
+    hdr.getCell(1).font = { bold:true, color:{argb:'FFFFFFFF'}, size:11 };
+    rowNum++;
+
+    // Column headers
+    const colHdr = ws.getRow(rowNum);
+    colHdr.values = ['Code','District / Account','Amount (CAD)'];
+    ['A','B','C'].forEach(col => {
+      ws.getCell(`${col}${rowNum}`).fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FFF1F5F9'} };
+      ws.getCell(`${col}${rowNum}`).font = { bold:true, size:9, color:{argb:'FF64748B'} };
+      ws.getCell(`${col}${rowNum}`).border = { bottom:{style:'thin',color:{argb:'FFE2E8F0'}} };
+    });
+    rowNum++;
+
+    // Data rows sorted highest to lowest
+    cat.rows.forEach((r, i) => {
+      const dr = ws.getRow(rowNum);
+      dr.getCell(1).value = r.code;
+      dr.getCell(2).value = r.name;
+      dr.getCell(3).value = r.amt;
+      dr.getCell(3).numFmt = '"$"#,##0.00';
+      dr.getCell(3).alignment = { horizontal:'right' };
+      if (i % 2 === 1) {
+        ['A','B','C'].forEach(col => {
+          ws.getCell(`${col}${rowNum}`).fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FFF9FAFB'} };
+        });
+      }
+      rowNum++;
+    });
+
+    // Category subtotal
+    const sub = ws.getRow(rowNum);
+    sub.getCell(2).value = `Subtotal — ${cat.label}`;
+    sub.getCell(3).value = cat.total;
+    sub.getCell(3).numFmt = '"$"#,##0.00';
+    sub.getCell(3).alignment = { horizontal:'right' };
+    ['B','C'].forEach(col => {
+      ws.getCell(`${col}${rowNum}`).font = { bold:true };
+      ws.getCell(`${col}${rowNum}`).border = { top:{style:'thin',color:{argb:'FFD1D5DB'}} };
+    });
+    rowNum += 2;
+  });
+
+  // Grand total
+  const gt = ws.getRow(rowNum);
+  gt.getCell(1).value = 'GRAND TOTAL — ALL OFFERINGS';
+  gt.getCell(3).value = grandTotal;
+  gt.getCell(3).numFmt = '"$"#,##0.00';
+  ws.mergeCells(`A${rowNum}:B${rowNum}`);
+  ['A','B','C'].forEach(col => {
+    ws.getCell(`${col}${rowNum}`).fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FF1A3C8F'} };
+    ws.getCell(`${col}${rowNum}`).font = { bold:true, color:{argb:'FFFFFFFF'}, size:12 };
+  });
+  ws.getCell(`C${rowNum}`).alignment = { horizontal:'right' };
+
+  const buf = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buf], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `National_Offering_Summary_${from}_${to}.xlsx`;
+  a.click();
+}
+
 async function genNationalSummary(from, to) {
   const content = document.getElementById('report-content');
   content.innerHTML = '<div class="text-center text-gray-400 py-8">Loading national summary…</div>';
@@ -4318,19 +4474,23 @@ async function genNationalSummary(from, to) {
 
   let grandTotal = 0;
   let sectionsHtml = '';
+  const cacheCategories = [];
 
   CATEGORIES.forEach(cat => {
     const catTotal = cat.codes.reduce((s,c) => s + Math.max(0, accountTotals[c]||0), 0);
     grandTotal += catTotal;
 
     let rowsHtml = '';
+    let cacheRows = [];
+
     if (cat.perDistrict) {
-      // Show each district that has a non-zero amount
+      // Show each district sorted highest to lowest
       const distRows = districtCodes
         .map(a => ({ name: a.name, code: a.code, amt: Math.max(0, accountTotals[a.code]||0) }))
         .filter(r => r.amt > 0)
         .sort((a,b) => b.amt - a.amt);
 
+      cacheRows = distRows;
       if (distRows.length === 0) {
         rowsHtml = `<tr><td colspan="3" class="text-center text-gray-400 text-xs py-2">No contributions recorded in this period.</td></tr>`;
       } else {
@@ -4344,12 +4504,15 @@ async function genNationalSummary(from, to) {
       const code = cat.codes[0];
       const acct = coaCache.find(a => a.code === code);
       const amt  = Math.max(0, accountTotals[code]||0);
+      cacheRows = [{ code, name: acct?.name||cat.label, amt }];
       rowsHtml = `<tr>
         <td class="text-xs text-gray-500 w-16">${code}</td>
         <td class="text-sm">${acct?.name||cat.label}</td>
         <td class="text-right font-semibold">${fmt2(amt)}</td>
       </tr>`;
     }
+
+    cacheCategories.push({ label: cat.label, total: catTotal, rows: cacheRows });
 
     sectionsHtml += `
       <div class="mb-6">
@@ -4370,6 +4533,9 @@ async function genNationalSummary(from, to) {
       </div>`;
   });
 
+  // Store for export
+  _nationalCache = { from, to, categories: cacheCategories, grandTotal };
+
   content.innerHTML = `
     <!-- Header -->
     <div style="border-bottom:3px solid #1a3c8f;padding-bottom:14px;margin-bottom:22px;">
@@ -4378,9 +4544,16 @@ async function genNationalSummary(from, to) {
           <div class="font-display font-bold" style="font-size:1.2rem;color:#1a3c8f;letter-spacing:-0.02em;">Church of Pentecost Canada Inc</div>
           <div class="font-bold text-gray-700 text-sm mt-0.5">National Offering Summary — All Districts Combined</div>
         </div>
-        <div class="text-right text-xs text-gray-400">
-          <div>Period: <strong class="text-gray-700">${fmtDate(from)}</strong> — <strong class="text-gray-700">${fmtDate(to)}</strong></div>
-          <div class="mt-0.5">Generated: ${new Date().toLocaleDateString('en-CA',{year:'numeric',month:'long',day:'numeric'})}</div>
+        <div class="flex flex-col items-end gap-2">
+          <div class="text-right text-xs text-gray-400">
+            <div>Period: <strong class="text-gray-700">${fmtDate(from)}</strong> — <strong class="text-gray-700">${fmtDate(to)}</strong></div>
+            <div class="mt-0.5">Generated: ${new Date().toLocaleDateString('en-CA',{year:'numeric',month:'long',day:'numeric'})}</div>
+          </div>
+          <div class="flex gap-2 flex-wrap justify-end">
+            <button class="btn-secondary text-xs" onclick="window.print()">🖨 Print</button>
+            <button class="btn-danger text-xs" onclick="exportNationalPDF()">⬇ Export PDF</button>
+            <button class="btn-gold text-xs" onclick="exportNationalExcel()">⬇ Export Excel</button>
+          </div>
         </div>
       </div>
     </div>
