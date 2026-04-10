@@ -4334,7 +4334,7 @@ async function genNationalSummary(from, to) {
       if (distRows.length === 0) {
         rowsHtml = `<tr><td colspan="3" class="text-center text-gray-400 text-xs py-2">No contributions recorded in this period.</td></tr>`;
       } else {
-        rowsHtml = distRows.map((r,i) => `<tr style="${i%2===0?'':'background:#f9fafb;}">
+        rowsHtml = distRows.map((r,i) => `<tr style="${i%2===0?'':'background:#f9fafb;'}">
           <td class="text-xs text-gray-500 w-16">${r.code}</td>
           <td class="text-sm">${r.name}</td>
           <td class="text-right font-semibold">${fmt2(r.amt)}</td>
