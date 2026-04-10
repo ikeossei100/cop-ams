@@ -10,6 +10,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.3.0/dist/exceljs.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
 <script>
@@ -359,6 +360,7 @@ tailwind.config = {
       <a class="sidebar-item flex items-center gap-2.5 px-3 py-2 rounded-lg cursor-pointer text-sm role-admin-only" onclick="showScreen('users')" data-screen="users">
         <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
         User Management
+        <span id="sidebar-pending-badge" style="display:none;background:#ef4444;color:white;font-size:10px;font-weight:700;padding:1px 6px;border-radius:999px;margin-left:auto;"></span>
       </a>
     </nav>
 
@@ -642,7 +644,16 @@ tailwind.config = {
         <span>envelope_number</span><span>district</span><span>description</span><span>ref_no</span>
         <span>bank_account_code</span><span>contributor_phone</span><span>contributor_email</span><span>contributor_address</span>
       </div>
-      <p class="text-xs text-blue-600 mt-2">Only <strong>date</strong>, <strong>account_code</strong>, and <strong>amount</strong> are required. All others are optional. Date format: <strong>YYYY-MM-DD</strong>. Download the template for a ready-to-fill example.</p>
+      <p class="text-xs text-blue-600 mt-2">Only <strong>date</strong> and <strong>amount</strong> are required when a default account is selected below. Date format: <strong>YYYY-MM-DD</strong>. Download the template for a ready-to-fill example.</p>
+    </div>
+
+    <!-- Default account selector -->
+    <div class="mb-4">
+      <label class="form-label">Default Account Code <span class="text-gray-400 font-normal normal-case">(applied to rows with no account_code in the file)</span></label>
+      <select id="contrib-import-default-acct" class="form-input w-full max-w-lg">
+        <option value="">— Select a default account (optional) —</option>
+      </select>
+      <p class="text-xs text-gray-400 mt-1">If your Excel file includes an <code>account_code</code> column, those values take priority over this selection.</p>
     </div>
 
     <!-- File picker -->
@@ -875,12 +886,29 @@ tailwind.config = {
           <select id="rpt-account" class="form-input w-56" style="display:none;"></select>
         </div>
       </div>
-      <div id="rpt-contributor-wrapper" style="display:none;">
-        <label class="form-label">Contributor Name</label>
-        <div class="relative">
-          <input type="text" id="rpt-contributor" class="form-input w-56" placeholder="Type to search…" oninput="filterContributorSuggestions()" autocomplete="off">
-          <div id="contributor-suggestions" class="absolute z-50 bg-white border border-gray-200 rounded-lg shadow-lg w-56 max-h-48 overflow-y-auto" style="display:none; top:100%; left:0;"></div>
+      <div id="rpt-contributor-wrapper" style="display:none;" class="flex flex-wrap gap-3 items-end">
+        <div>
+          <label class="form-label">Contributor Name</label>
+          <div class="relative">
+            <input type="text" id="rpt-contributor" class="form-input w-52" placeholder="Type name to search…" oninput="filterContributorSuggestions()" autocomplete="off">
+            <div id="contributor-suggestions" class="absolute z-50 bg-white border border-gray-200 rounded-lg shadow-lg w-52 max-h-48 overflow-y-auto" style="display:none; top:100%; left:0;"></div>
+          </div>
         </div>
+        <div>
+          <label class="form-label">Envelope No</label>
+          <input type="text" id="rpt-contributor-env" class="form-input w-32" placeholder="e.g. ENV-001" autocomplete="off">
+        </div>
+        <div>
+          <label class="form-label">Phone</label>
+          <input type="text" id="rpt-contributor-phone" class="form-input w-36" placeholder="e.g. 416-555-0100" autocomplete="off">
+        </div>
+        <p class="text-xs text-gray-400 self-end pb-1">Fill any one field to search</p>
+      </div>
+      <div id="rpt-user-wrapper" style="display:none;">
+        <label class="form-label">Filter by User</label>
+        <select id="rpt-user-filter" class="form-input w-52">
+          <option value="all">All Users (Combined)</option>
+        </select>
       </div>
       <button class="btn-primary text-xs" onclick="generateReport()">Generate</button>
       <button class="btn-secondary text-xs" onclick="printReport()">Print</button>
@@ -898,6 +926,21 @@ tailwind.config = {
 
 <!-- ═══ UTILITIES ═══ -->
 <div id="screen-utilities" class="screen">
+
+  <!-- Weekly Reminders — standalone section, always visible -->
+  <div class="card p-5 mb-5" style="border-left:4px solid #0284c7;">
+    <div class="flex items-center justify-between flex-wrap gap-3">
+      <div class="flex items-center gap-3">
+        <span style="font-size:1.6rem;">📧</span>
+        <div>
+          <div class="font-bold text-gray-800">Weekly Transaction Reminders</div>
+          <p class="text-xs text-gray-500 mt-0.5">Auto-email all users every Tuesday to enter their district transactions.</p>
+        </div>
+      </div>
+      <button class="btn-primary text-sm" style="padding:8px 20px;" onclick="openReminderSettings()">Manage Reminders</button>
+    </div>
+  </div>
+
   <div class="grid md:grid-cols-3 gap-4 mb-6">
     <div class="card p-5">
       <div class="text-2xl mb-2">💾</div>
@@ -923,6 +966,66 @@ tailwind.config = {
       <div class="font-semibold text-gray-700 mb-1">Import Opening Balances</div>
       <p class="text-xs text-gray-500 mb-3">Bring in balances from another software (CSV or Excel) and continue your books from there.</p>
       <button class="btn-primary text-xs w-full" onclick="showImportPanel()">Open Import Tool</button>
+    </div>
+  </div>
+
+  <!-- ── Weekly Reminder Settings Panel ── -->
+  <div id="reminder-panel" class="card p-5 mb-4" style="display:none;">
+    <div class="flex items-center justify-between mb-4">
+      <div>
+        <h3 class="font-semibold text-gray-800 text-sm">Weekly Transaction Reminder — Every Tuesday</h3>
+        <p class="text-xs text-gray-500 mt-0.5">Emails are sent automatically every Tuesday at 9:00 AM via a Supabase scheduled function.</p>
+      </div>
+      <button onclick="closeReminderPanel()" class="text-gray-400 hover:text-gray-600 text-xl font-bold">&times;</button>
+    </div>
+
+    <!-- Custom message -->
+    <div class="mb-4">
+      <label class="form-label">Reminder Message (shown in email body)</label>
+      <textarea id="reminder-message" class="form-input w-full" rows="4" placeholder="e.g. Please log in and enter all transactions for your district this week…">Please log in and enter all contributions and transactions for your district this week. Keeping records up to date ensures accurate financial reports for the Church of Pentecost Canada Inc.
+
+Login at: </textarea>
+      <p class="text-xs text-gray-400 mt-1">The user's name, district, and the app URL will be appended automatically.</p>
+    </div>
+
+    <!-- Recipient preview -->
+    <div class="mb-4">
+      <div class="flex items-center justify-between mb-2">
+        <label class="form-label mb-0">Recipients (all active approved users)</label>
+        <button class="text-xs text-blue-600 hover:underline" onclick="loadReminderRecipients()">Refresh list</button>
+      </div>
+      <div id="reminder-recipients" class="border border-gray-200 rounded-lg p-3 bg-gray-50 max-h-40 overflow-y-auto text-xs text-gray-600">
+        <span class="text-gray-400 italic">Click "Refresh list" to preview recipients.</span>
+      </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="flex gap-3 flex-wrap">
+      <button class="btn-primary text-xs" onclick="sendTestReminder()">Send Test Email Now</button>
+      <button class="btn-secondary text-xs" onclick="openReminderSetupInstructions()">View Setup Instructions</button>
+    </div>
+
+    <!-- Setup instructions (hidden by default) -->
+    <div id="reminder-setup-instructions" class="mt-5" style="display:none;">
+      <div style="background:#f0f9ff;border:1.5px solid #bae6fd;border-radius:10px;padding:16px;">
+        <p class="text-sm font-bold text-blue-900 mb-3">One-time Supabase Setup (Admin only — do this once)</p>
+
+        <p class="text-xs font-semibold text-blue-800 mb-1">Step 1 — Create the Edge Function</p>
+        <p class="text-xs text-blue-700 mb-2">In Supabase Dashboard → Edge Functions → New Function → name it <code class="bg-blue-100 px-1 rounded">send-reminders</code> → paste this code:</p>
+        <pre id="edge-fn-code" class="text-xs bg-gray-900 text-green-300 rounded-lg p-3 overflow-x-auto mb-3 whitespace-pre-wrap"></pre>
+        <button class="text-xs text-blue-700 underline mb-4" onclick="copyReminderCode('edge-fn-code')">Copy Edge Function Code</button>
+
+        <p class="text-xs font-semibold text-blue-800 mt-3 mb-1">Step 2 — Set the Edge Function Secret</p>
+        <p class="text-xs text-blue-700 mb-2">In Supabase → Edge Functions → <code>send-reminders</code> → Secrets → add:</p>
+        <pre class="text-xs bg-gray-900 text-green-300 rounded-lg p-3 mb-1">SUPABASE_SERVICE_ROLE_KEY = &lt;your service role key from Project Settings → API&gt;</pre>
+
+        <p class="text-xs font-semibold text-blue-800 mt-3 mb-1">Step 3 — Enable the weekly cron job</p>
+        <p class="text-xs text-blue-700 mb-2">In Supabase → SQL Editor → run this SQL:</p>
+        <pre id="cron-sql-code" class="text-xs bg-gray-900 text-green-300 rounded-lg p-3 overflow-x-auto mb-1 whitespace-pre-wrap"></pre>
+        <button class="text-xs text-blue-700 underline" onclick="copyReminderCode('cron-sql-code')">Copy SQL</button>
+
+        <p class="text-xs text-gray-500 mt-3">The cron runs every Tuesday at 9:00 AM UTC. To change the time, edit the cron expression <code>0 9 * * 2</code> (format: minute hour * * day-of-week, where 2 = Tuesday).</p>
+      </div>
     </div>
   </div>
 
@@ -1170,9 +1273,27 @@ tailwind.config = {
     <h3 class="text-sm font-semibold text-gray-700">User Management</h3>
     <button class="btn-primary text-xs" onclick="openUserForm()">+ Invite User</button>
   </div>
+
+  <!-- Pending Approvals -->
+  <div id="pending-approvals-section" style="display:none;" class="mb-5">
+    <div class="flex items-center gap-2 mb-2">
+      <h4 class="text-sm font-bold text-orange-700">Pending Approvals</h4>
+      <span id="pending-badge" class="text-xs font-bold px-2 py-0.5 rounded-full" style="background:#fed7aa;color:#c2410c;"></span>
+    </div>
+    <div class="card overflow-hidden border-2 border-orange-200">
+      <table class="tbl">
+        <thead style="background:#fff7ed;">
+          <tr><th>Name</th><th>District</th><th>Role Requested</th><th>Actions</th></tr>
+        </thead>
+        <tbody id="pending-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Active Users -->
   <div class="card overflow-hidden">
     <table class="tbl">
-      <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>District</th><th>Status</th><th>Actions</th></tr></thead>
+      <thead><tr><th>Name</th><th>User ID</th><th>Role</th><th>District</th><th>Status</th><th>Actions</th></tr></thead>
       <tbody id="users-tbody"><tr><td colspan="6" class="text-center py-8 text-gray-400">Loading users…</td></tr></tbody>
     </table>
   </div>
@@ -1285,6 +1406,14 @@ async function authLogin() {
     clearAttempts(email);
     currentUser = data.user;
     await loadProfile();
+    // Block unapproved accounts
+    if (currentProfile?.is_approved === false) {
+      await sb.auth.signOut();
+      currentUser = null; currentProfile = null; _districtUids = null;
+      errEl.textContent = 'Your account is pending approval by an administrator. Please check back later.';
+      errEl.classList.remove('hidden');
+      return;
+    }
     startApp();
   } catch(e) {
     errEl.textContent = 'Connection error. Check your internet connection.';
@@ -1369,29 +1498,30 @@ async function authRegister() {
 
     const uid = data.user?.id;
     if (uid) {
-      // 2. Create profile row
+      // 2. Create profile row — is_approved: false until admin approves
       await sb.from('profiles').upsert({
         id: uid, full_name: name, role, district: district||null,
-        is_active: true, failed_attempts: 0
+        is_active: true, is_approved: false, failed_attempts: 0
       }, { onConflict: 'id' });
     }
 
-    okEl.textContent = 'Account created! You can now sign in with your email and password.';
+    okEl.textContent = 'Account created! Your account is pending approval by an administrator. You will be notified when access is granted.';
     okEl.classList.remove('hidden');
     // Clear fields
     ['reg-name','reg-email','reg-password','reg-confirm','reg-district'].forEach(id => {
       const el = document.getElementById(id); if (el) el.value = '';
     });
-    setTimeout(() => switchAuthTab('signin'), 2500);
+    setTimeout(() => switchAuthTab('signin'), 4000);
   } catch(e) {
     errEl.textContent = 'Connection error. Please try again.';
     errEl.classList.remove('hidden');
   }
 }
 
+let _districtUids = null; // array of user IDs in the same district as current user (null = not loaded)
+
 async function loadProfile() {
   const { data } = await sb.from('profiles').select('*').eq('id', currentUser.id).single();
-  // If no profile row exists yet, create a default admin profile so the user isn't locked out
   if (!data) {
     currentProfile = {
       id: currentUser.id,
@@ -1400,8 +1530,20 @@ async function loadProfile() {
       is_active: true,
       _no_profile_row: true
     };
+    _districtUids = null;
   } else {
     currentProfile = data;
+    // Load all user IDs that belong to the same district so data can be segmented by district.
+    // Admins skip this — they see everything.
+    if (data.role !== 'admin' && data.district) {
+      const { data: peers } = await sb.from('profiles')
+        .select('id')
+        .eq('district', data.district)
+        .eq('is_active', true);
+      _districtUids = (peers || []).map(p => p.id);
+    } else {
+      _districtUids = null; // admin or no district set
+    }
   }
 }
 
@@ -1454,7 +1596,7 @@ async function saveChangeMyPassword() {
 
 async function authLogout() {
   await sb.auth.signOut();
-  currentUser = null; currentProfile = null;
+  currentUser = null; currentProfile = null; _districtUids = null;
   document.getElementById('app-shell').classList.add('hidden');
   document.getElementById('app-shell').style.display = '';
   document.getElementById('auth-screen').classList.remove('hidden');
@@ -1467,7 +1609,22 @@ setInterval(async () => {
 
 async function checkSession() {
   const { data: { session } } = await sb.auth.getSession();
-  if (session) { currentUser = session.user; await loadProfile(); startApp(); }
+  if (session) {
+    currentUser = session.user;
+    await loadProfile();
+    // Block access if account is pending admin approval
+    if (currentProfile?.is_approved === false) {
+      await sb.auth.signOut();
+      currentUser = null; currentProfile = null; _districtUids = null;
+      const errEl = document.getElementById('auth-error');
+      if (errEl) {
+        errEl.textContent = 'Your account is pending approval by an administrator. Please check back later.';
+        errEl.classList.remove('hidden');
+      }
+      return;
+    }
+    startApp();
+  }
 }
 
 function startApp() {
@@ -1493,6 +1650,14 @@ function startApp() {
   initCOACache();
   showScreen('dashboard');
   loadDashboard();
+  // For admins: check for pending signups and show sidebar badge
+  if (role === 'admin') {
+    sb.from('profiles').select('id').eq('is_approved', false).then(({ data }) => {
+      const count = (data||[]).length;
+      const badge = document.getElementById('sidebar-pending-badge');
+      if (badge) { badge.textContent = count||''; badge.style.display = count > 0 ? 'inline' : 'none'; }
+    });
+  }
 
   // Warn if profile row is missing in the database
   if (currentProfile?._no_profile_row) {
@@ -1558,8 +1723,17 @@ async function logAction(action, tableName, recordId, oldVal, newVal) {
 function fmt(n) { return '$' + (parseFloat(n)||0).toLocaleString('en-CA',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 // Returns user ID only if a real profile row exists in DB (avoids FK violations)
 function myId() { return currentProfile?._no_profile_row ? null : (currentUser?.id || null); }
-// Apply per-user data isolation to any Supabase query builder
-function withUser(q) { const uid=myId(); return uid ? q.eq('entered_by',uid) : q; }
+// Apply district-based data isolation to any Supabase query builder.
+// - Admin: no filter (sees all districts)
+// - User with district set: sees all entries from users in same district
+// - User without district: sees only their own entries
+function withUser(q) {
+  const uid  = myId();
+  const role = currentProfile?.role;
+  if (!uid || role === 'admin') return q;                   // admin — no filter
+  if (_districtUids && _districtUids.length > 0) return q.in('entered_by', _districtUids); // district filter
+  return q.eq('entered_by', uid);                           // no district — own data only
+}
 function fmtNum(n) { return (parseFloat(n)||0).toLocaleString('en-CA',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function today() { return new Date().toISOString().split('T')[0]; }
 
@@ -2589,16 +2763,76 @@ async function saveContrib(id, status) {
 // CONTRIBUTION EXCEL IMPORT
 // ══════════════════════════════════════════════
 
-function downloadContribTemplate() {
-  if (typeof XLSX === 'undefined') { toast('XLSX library not loaded.','error'); return; }
+async function downloadContribTemplate() {
+  if (typeof ExcelJS === 'undefined') { toast('ExcelJS library not loaded yet — try again in a moment.','error'); return; }
+
+  // Gather all active Income accounts
+  const incomeAccts = coaCache
+    .filter(a => a.category === 'Income' && a.type === 'Detail' && a.active !== false)
+    .sort((a,b) => (a.sort_order||0)-(b.sort_order||0) || a.code.localeCompare(b.code));
+
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'COP AMS';
+  wb.created = new Date();
+
+  // ── Sheet 1: hidden lookup list (MUST be added first) ──
+  const listWs = wb.addWorksheet('_AccountList');
+  listWs.state = 'hidden';
+  incomeAccts.forEach((a, i) => {
+    listWs.getCell(`A${i + 1}`).value = `${a.code} - ${a.name}`;
+  });
+  const listLastRow = incomeAccts.length;
+
+  // ── Sheet 2: Contributions data entry ──
+  const ws = wb.addWorksheet('Contributions');
+
   const headers = ['date','account_code','amount','contributor_name','envelope_number','district','description','ref_no','bank_account_code','contributor_phone','contributor_email','contributor_address'];
-  const example = ['2026-01-15','4051','250.00','John Mensah','ENV-001','Toronto Central','Sunday Offering','REF001','1110','416-555-0100','john@example.com','123 Main St, Toronto ON'];
-  const ws = XLSX.utils.aoa_to_sheet([headers, example]);
-  // Column widths
-  ws['!cols'] = headers.map(h => ({ wch: Math.max(h.length + 2, 18) }));
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Contributions');
-  XLSX.writeFile(wb, 'Contribution_Import_Template.xlsx');
+  const colWidths  = [14, 16, 12, 22, 16, 18, 36, 12, 18, 18, 28, 30];
+
+  const headerRow = ws.addRow(headers);
+  headerRow.eachCell(cell => {
+    cell.font      = { bold: true, color: { argb: 'FFFFFFFF' } };
+    cell.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0284C7' } };
+    cell.alignment = { horizontal: 'center' };
+    cell.border    = { bottom: { style: 'medium', color: { argb: 'FF1A3C8F' } } };
+  });
+  headers.forEach((_, i) => { ws.getColumn(i + 1).width = colWidths[i]; });
+
+  ws.addRow([
+    '2026-01-15',
+    incomeAccts[0]?.code || '4051',
+    '250.00', 'John Mensah', 'ENV-001', 'Toronto Central',
+    incomeAccts[0] ? `${incomeAccts[0].code} - ${incomeAccts[0].name}` : 'Sunday Offering',
+    'REF001', '1110', '416-555-0100', 'john@example.com', '123 Main St, Toronto ON'
+  ]);
+
+  ws.views = [{ state: 'frozen', ySplit: 1 }];
+
+  // ── Data validation: description column = G (index 7) ──
+  // Reference the hidden sheet directly — this is the only approach that works
+  // reliably in Excel for lists longer than 255 characters.
+  const formula = `_AccountList!$A$1:$A$${listLastRow}`;
+  for (let row = 2; row <= 500; row++) {
+    ws.getCell(`G${row}`).dataValidation = {
+      type: 'list',
+      allowBlank: true,
+      formulae: [formula],
+      showInputMessage: true,
+      promptTitle: 'Select Account',
+      prompt: 'Click the dropdown arrow to choose a contribution account.',
+      showErrorMessage: false,
+    };
+  }
+
+  // ── Download ──
+  const buffer = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'Contribution_Import_Template.xlsx';
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(url);
+  toast('Template downloaded — click any cell in the description column to see the account dropdown.', 'success');
 }
 
 let _contribImportRows = [];  // parsed valid rows ready to import
@@ -2606,6 +2840,22 @@ let _contribImportRows = [];  // parsed valid rows ready to import
 function openContribImport() {
   document.getElementById('contrib-import-panel').style.display = 'block';
   document.getElementById('contrib-import-panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  // Populate the default account dropdown with all active Income accounts
+  const sel = document.getElementById('contrib-import-default-acct');
+  if (sel && coaCache.length) {
+    const prev = sel.value;
+    sel.innerHTML = '<option value="">— Select a default account (optional) —</option>';
+    coaCache
+      .filter(a => a.category === 'Income' && a.type === 'Detail' && a.active !== false)
+      .sort((a,b) => (a.sort_order||0)-(b.sort_order||0) || a.code.localeCompare(b.code))
+      .forEach(a => {
+        const opt = document.createElement('option');
+        opt.value = a.code;
+        opt.textContent = `${a.code} – ${a.name}`;
+        sel.appendChild(opt);
+      });
+    if (prev) sel.value = prev;
+  }
 }
 
 function closeContribImport() {
@@ -2647,16 +2897,20 @@ function processContribSheet(wb) {
   const headers = rows[hIdx].map(c => String(c).trim().toLowerCase());
   const col = h => headers.indexOf(h);
 
+  const defaultAcct = (document.getElementById('contrib-import-default-acct')?.value || '').trim();
+
   const valid = [], errors = [];
   for (let i = hIdx + 1; i < rows.length; i++) {
     const r = rows[i];
     const rawDate   = String(r[col('date')]||'').trim();
-    const acctCode  = String(r[col('account_code')]||'').trim();
+    const rawAcct   = String(r[col('account_code')]||'').trim();
+    // Use the per-row code if present, otherwise fall back to the selected default
+    const acctCode  = rawAcct || defaultAcct;
     const rawAmt    = String(r[col('amount')]||'').replace(/[$,]/g,'').trim();
     const amount    = parseFloat(rawAmt);
 
     // Skip blank rows
-    if (!rawDate && !acctCode && !rawAmt) continue;
+    if (!rawDate && !rawAcct && !rawAmt) continue;
 
     const rowErrors = [];
     // Validate date — accept YYYY-MM-DD or M/D/YYYY or Excel serial
@@ -2673,7 +2927,7 @@ function processContribSheet(wb) {
     } else {
       rowErrors.push('Invalid date');
     }
-    if (!acctCode) rowErrors.push('Missing account_code');
+    if (!acctCode) rowErrors.push('Missing account_code (no column in file and no default selected)');
     if (isNaN(amount) || amount <= 0) rowErrors.push('Invalid amount');
 
     const bank_account_code = String(r[col('bank_account_code')]||'1110').trim() || '1110';
@@ -2681,6 +2935,7 @@ function processContribSheet(wb) {
     const row = {
       _rowNum: i + 1,
       _errors: rowErrors,
+      _usedDefaultAcct: !rawAcct && !!defaultAcct, // flag if default was applied
       date,
       account_code:        acctCode,
       amount:              isNaN(amount) ? 0 : amount,
@@ -2711,15 +2966,28 @@ function renderContribImportPreview(rows, errors) {
     `${rows.length} row(s) found — ${validRows.length} valid, ${invalidRows.length} with errors. Total: ${fmt(grandTotal)}`;
 
   const tbody = document.getElementById('contrib-import-tbody');
+  // Build income account options once for all rows
+  const incomeOpts = coaCache
+    .filter(a => a.category === 'Income' && a.type === 'Detail' && a.active !== false)
+    .sort((a,b) => (a.sort_order||0)-(b.sort_order||0) || a.code.localeCompare(b.code))
+    .map(a => `<option value="${a.code}">${a.code} – ${a.name}</option>`)
+    .join('');
+
   tbody.innerHTML = rows.map((r, i) => {
-    const acct = coaCache.find(a => a.code === r.account_code);
-    const acctName = acct ? r.account_code + ' – ' + acct.name : (r.account_code || '—');
     const isErr = r._errors.length > 0;
     const bg = isErr ? 'background:#fef2f2;' : (i%2===0?'':'background:#f9fafb;');
-    return `<tr style="${bg}">
+    const defaultNote = r._usedDefaultAcct ? ' <span style="color:#0284c7;font-size:10px;">(default)</span>' : '';
+    const acctSelect = `<select onchange="updateImportRowAccount(${i},this.value)"
+        style="border:1px solid #d1d5db;border-radius:6px;padding:3px 6px;font-size:11px;max-width:220px;background:white;"
+        title="Change account for this row">
+        <option value="">— select account —</option>
+        ${incomeOpts}
+      </select>${defaultNote}`;
+    // Pre-select current value after rendering (set via JS below)
+    return `<tr style="${bg}" data-row="${i}">
       <td class="text-gray-400">${r._rowNum}</td>
       <td>${r.date||'<span class="text-red-500">—</span>'}</td>
-      <td class="text-xs">${acctName}</td>
+      <td class="text-xs">${acctSelect}</td>
       <td>${r.contributor_name||'—'}</td>
       <td class="text-xs">${r.envelope_number||'—'}</td>
       <td class="text-xs">${r.district||'—'}</td>
@@ -2730,12 +2998,50 @@ function renderContribImportPreview(rows, errors) {
     </tr>`;
   }).join('');
 
+  // Pre-select current account_code in each row's dropdown
+  rows.forEach((r, i) => {
+    const row = tbody.querySelector(`tr[data-row="${i}"]`);
+    if (!row) return;
+    const sel = row.querySelector('select');
+    if (sel && r.account_code) sel.value = r.account_code;
+  });
+
   const errEl = document.getElementById('contrib-import-errors');
   errEl.textContent = invalidRows.length ? `${invalidRows.length} row(s) will be skipped due to errors.` : '';
   errEl.style.color = '#dc2626';
 
   document.getElementById('contrib-import-confirm-btn').disabled = validRows.length === 0;
   document.getElementById('contrib-import-preview').style.display = 'block';
+}
+
+// Called when user changes the account dropdown on a preview row
+function updateImportRowAccount(idx, code) {
+  if (!_contribImportRows[idx]) return;
+  _contribImportRows[idx].account_code = code;
+  _contribImportRows[idx]._usedDefaultAcct = false;
+  // Clear "Missing account_code" error if now filled
+  _contribImportRows[idx]._errors = _contribImportRows[idx]._errors
+    .filter(e => !e.startsWith('Missing account_code'));
+  if (!code) _contribImportRows[idx]._errors.push('Missing account_code');
+  // Refresh summary counts and button state without re-rendering all rows
+  const validRows = _contribImportRows.filter(r => r._errors.length === 0);
+  const invalidRows = _contribImportRows.filter(r => r._errors.length > 0);
+  const grandTotal = validRows.reduce((s,r) => s + r.amount, 0);
+  document.getElementById('contrib-import-summary').textContent =
+    `${_contribImportRows.length} row(s) found — ${validRows.length} valid, ${invalidRows.length} with errors. Total: ${fmt(grandTotal)}`;
+  document.getElementById('contrib-import-confirm-btn').disabled = validRows.length === 0;
+  // Update row background and status cell
+  const tbody = document.getElementById('contrib-import-tbody');
+  const row = tbody.querySelector(`tr[data-row="${idx}"]`);
+  if (row) {
+    const isErr = _contribImportRows[idx]._errors.length > 0;
+    row.style.background = isErr ? '#fef2f2' : '';
+    const cells = row.querySelectorAll('td');
+    const statusCell = cells[cells.length - 1];
+    if (statusCell) statusCell.innerHTML = isErr
+      ? `<span class="text-xs text-red-600 font-semibold">⚠ ${_contribImportRows[idx]._errors.join('; ')}</span>`
+      : '<span class="text-xs text-green-700">✓ OK</span>';
+  }
 }
 
 async function confirmContribImport() {
@@ -3512,6 +3818,39 @@ async function finalizeReconciliation() {
 let activeReport=null;
 let _isReportCache = null;  // stores last IS data for clean PDF export
 let _bsReportCache = null; // stores last BS data for clean PDF export
+let _rptUserFilter = 'all'; // 'all' or a specific user UUID — set before each report run
+
+// Returns the right entered_by filter for report queries.
+// Admins can choose a specific user or "all". Non-admins are limited to their district.
+function reportUserFilter(q) {
+  const role = currentProfile?.role;
+  const uid  = myId();
+  // Admin with a specific user selected
+  if (role === 'admin' && _rptUserFilter && _rptUserFilter !== 'all') return q.eq('entered_by', _rptUserFilter);
+  // Admin with "all" → no filter
+  if (role === 'admin') return q;
+  // Non-admin: restrict to own district (or own data if no district)
+  if (_districtUids && _districtUids.length > 0) return q.in('entered_by', _districtUids);
+  if (uid) return q.eq('entered_by', uid);
+  return q;
+}
+
+// Populate the user-filter dropdown in reports (admin only)
+async function populateRptUserFilter() {
+  const sel = document.getElementById('rpt-user-filter');
+  if (!sel) return;
+  const { data } = await sb.from('profiles').select('id,full_name,district').eq('is_active', true).order('full_name');
+  const prev = sel.value;
+  sel.innerHTML = '<option value="all">All Users (Combined)</option>';
+  (data || []).forEach(u => {
+    const opt = document.createElement('option');
+    opt.value = u.id;
+    opt.textContent = u.full_name + (u.district ? ` — ${u.district}` : '');
+    sel.appendChild(opt);
+  });
+  // Restore previous selection if still valid
+  if (prev && [...sel.options].some(o => o.value === prev)) sel.value = prev;
+}
 
 function runReport(type) {
   activeReport=type;
@@ -3531,11 +3870,23 @@ function runReport(type) {
   if(type==='contributor-statement'){
     conWrapper.style.display='block';
     document.getElementById('rpt-contributor').value='';
+    document.getElementById('rpt-contributor-env').value='';
+    document.getElementById('rpt-contributor-phone').value='';
     document.getElementById('contributor-suggestions').style.display='none';
     document.getElementById('btn-print-all-stmts').style.display='inline-block';
   } else {
     conWrapper.style.display='none';
     document.getElementById('btn-print-all-stmts').style.display='none';
+  }
+  // Show user-filter dropdown for admins only
+  const userWrapper = document.getElementById('rpt-user-wrapper');
+  if (userWrapper) {
+    if (currentProfile?.role === 'admin') {
+      userWrapper.style.display = '';
+      populateRptUserFilter();
+    } else {
+      userWrapper.style.display = 'none';
+    }
   }
 }
 
@@ -3543,6 +3894,10 @@ async function generateReport() {
   const from=document.getElementById('rpt-from').value;
   const to=document.getElementById('rpt-to').value;
   if(!from||!to){toast('Select date range.','error');return;}
+  // Capture user filter selection before running (admin only; otherwise always own data)
+  _rptUserFilter = (currentProfile?.role === 'admin')
+    ? (document.getElementById('rpt-user-filter')?.value || 'all')
+    : (myId() || 'all');
   document.getElementById('report-output').style.display='block';
   const content=document.getElementById('report-content');
   content.innerHTML='<div class="text-center text-gray-400 py-8">Generating report…</div>';
@@ -3560,13 +3915,13 @@ async function generateReport() {
 
 async function getPostedJournals(from,to) {
   let q = sb.from('journals').select('*').eq('status','posted').gte('date',from).lte('date',to);
-  const uid = myId(); if (uid) q = q.eq('entered_by', uid);
+  q = reportUserFilter(q);
   const {data}=await q;
   return data||[];
 }
 async function getPostedContribs(from,to) {
   let q = sb.from('contributions').select('*').eq('status','posted').gte('date',from).lte('date',to);
-  const uid = myId(); if (uid) q = q.eq('entered_by', uid);
+  q = reportUserFilter(q);
   const {data}=await q;
   return data||[];
 }
@@ -3866,7 +4221,7 @@ async function genBalanceSheet(from,to) {
 }
 
 async function genContribDistribution(from,to) {
-  const {data,error}=await withUser(sb.from('contributions').select('*').eq('status','posted').gte('date',from).lte('date',to).order('date',{ascending:true}));
+  const {data,error}=await reportUserFilter(sb.from('contributions').select('*').eq('status','posted').gte('date',from).lte('date',to).order('date',{ascending:true}));
   if(error){toast('Error: '+error.message,'error');return;}
   const list=data||[];
   const rows=list.map(c=>{
@@ -3897,31 +4252,55 @@ async function genContribDistribution(from,to) {
 }
 
 let contributorNames=[];
+// Reset both caches when new contributions are posted/saved so suggestions stay fresh
+function resetContributorCache(){ contributorNames=[]; _contributorIndex=[]; }
+let _contributorIndex = []; // [{name, envelope_number, contributor_phone}]
+
 async function filterContributorSuggestions() {
   const q=(document.getElementById('rpt-contributor').value||'').trim().toLowerCase();
   const box=document.getElementById('contributor-suggestions');
   if(!q){box.style.display='none';return;}
-  if(!contributorNames.length){
-    const {data}=await withUser(sb.from('contributions').select('contributor_name').not('contributor_name','is',null).neq('contributor_name',''));
-    contributorNames=[...new Set((data||[]).map(r=>r.contributor_name).filter(Boolean))].sort();
+  if(!_contributorIndex.length){
+    const {data}=await withUser(sb.from('contributions').select('contributor_name,envelope_number,contributor_phone').not('contributor_name','is',null).neq('contributor_name',''));
+    // Deduplicate by name, keeping latest envelope/phone found
+    const map={};
+    (data||[]).forEach(r=>{
+      if(!r.contributor_name) return;
+      if(!map[r.contributor_name]) map[r.contributor_name]={name:r.contributor_name,envelope_number:'',contributor_phone:''};
+      if(r.envelope_number) map[r.contributor_name].envelope_number=r.envelope_number;
+      if(r.contributor_phone) map[r.contributor_name].contributor_phone=r.contributor_phone;
+    });
+    _contributorIndex=Object.values(map).sort((a,b)=>a.name.localeCompare(b.name));
+    contributorNames=_contributorIndex.map(c=>c.name); // keep backward compat
   }
-  const matches=contributorNames.filter(n=>n.toLowerCase().includes(q)).slice(0,10);
+  const matches=_contributorIndex.filter(c=>c.name.toLowerCase().includes(q)).slice(0,10);
   if(!matches.length){box.style.display='none';return;}
-  box.innerHTML=matches.map(n=>`<div class="px-3 py-2 text-sm hover:bg-red-50 cursor-pointer" onclick="selectContributor('${n.replace(/'/g,"\\'")}')">
-    ${n}</div>`).join('');
+  box.innerHTML=matches.map(c=>{
+    const sub=[c.envelope_number?'Env: '+c.envelope_number:'', c.contributor_phone||''].filter(Boolean).join(' · ');
+    return `<div class="px-3 py-2 hover:bg-blue-50 cursor-pointer" onclick="selectContributor('${c.name.replace(/'/g,"\\'")}','${(c.envelope_number||'').replace(/'/g,"\\'")}','${(c.contributor_phone||'').replace(/'/g,"\\'")}')">
+      <div class="text-sm font-medium text-gray-800">${c.name}</div>
+      ${sub?`<div class="text-xs text-gray-400">${sub}</div>`:''}
+    </div>`;
+  }).join('');
   box.style.display='block';
 }
-function selectContributor(name){
+function selectContributor(name, envNo, phone){
   document.getElementById('rpt-contributor').value=name;
+  if(document.getElementById('rpt-contributor-env') && envNo) document.getElementById('rpt-contributor-env').value=envNo;
+  if(document.getElementById('rpt-contributor-phone') && phone) document.getElementById('rpt-contributor-phone').value=phone;
   document.getElementById('contributor-suggestions').style.display='none';
 }
 
 async function genContributorStatement(from,to) {
-  const name=(document.getElementById('rpt-contributor').value||'').trim();
-  if(!name){toast('Enter a contributor name.','error');return;}
-  const {data,error}=await withUser(sb.from('contributions').select('*')
-    .ilike('contributor_name',name).eq('status','posted')
-    .gte('date',from).lte('date',to).order('date',{ascending:true}));
+  const name  = (document.getElementById('rpt-contributor').value||'').trim();
+  const envNo = (document.getElementById('rpt-contributor-env')?.value||'').trim();
+  const phone = (document.getElementById('rpt-contributor-phone')?.value||'').trim();
+  if(!name && !envNo && !phone){toast('Enter a contributor name, envelope number, or phone number.','error');return;}
+  let q = withUser(sb.from('contributions').select('*').eq('status','posted').gte('date',from).lte('date',to).order('date',{ascending:true}));
+  if (envNo)       q = q.ilike('envelope_number', envNo);
+  else if (phone)  q = q.ilike('contributor_phone', `%${phone}%`);
+  else             q = q.ilike('contributor_name', name);
+  const {data,error}=await q;
   if(error){toast('Error: '+error.message,'error');return;}
   const list=data||[];
   // Grab contact details from first record
@@ -6342,6 +6721,161 @@ async function saveEditedBankRec(id) {
 }
 
 // ══════════════════════════════════════════════
+// ══════════════════════════════════════════════
+// WEEKLY REMINDER
+// ══════════════════════════════════════════════
+
+function openReminderSettings() {
+  if (currentProfile?.role !== 'admin') { toast('Admin access required.', 'error'); return; }
+  const panel = document.getElementById('reminder-panel');
+  panel.style.display = 'block';
+  panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  loadReminderRecipients();
+  populateReminderCodes();
+}
+
+function closeReminderPanel() {
+  document.getElementById('reminder-panel').style.display = 'none';
+  document.getElementById('reminder-setup-instructions').style.display = 'none';
+}
+
+function openReminderSetupInstructions() {
+  document.getElementById('reminder-setup-instructions').style.display = 'block';
+}
+
+function copyReminderCode(elId) {
+  const text = document.getElementById(elId).textContent;
+  navigator.clipboard.writeText(text).then(() => toast('Copied to clipboard.', 'success'));
+}
+
+function populateReminderCodes() {
+  const appUrl = window.location.origin + window.location.pathname;
+  const projectId = SUPABASE_URL.replace('https://','').split('.')[0];
+
+  const edgeFn = `import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+const serviceKey  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+
+Deno.serve(async (req) => {
+  const admin = createClient(supabaseUrl, serviceKey, {
+    auth: { autoRefreshToken: false, persistSession: false }
+  });
+
+  // Get all active approved users
+  const { data: profiles } = await admin
+    .from('profiles')
+    .select('id, full_name, district')
+    .eq('is_active', true)
+    .eq('is_approved', true);
+
+  if (!profiles?.length) return new Response('No users found', { status: 200 });
+
+  // Get emails from auth
+  const { data: { users } } = await admin.auth.admin.listUsers({ perPage: 500 });
+  const emailMap = Object.fromEntries((users || []).map(u => [u.id, u.email]));
+
+  const body = req.method === 'POST' ? await req.json().catch(() => ({})) : {};
+  const customMessage = body.message || 'Please log in and enter all contributions and transactions for your district this week.';
+  const appLink = '${appUrl}';
+
+  let sent = 0;
+  for (const profile of profiles) {
+    const email = emailMap[profile.id];
+    if (!email) continue;
+    const district = profile.district ? \`District: \${profile.district}\\n\` : '';
+    const text = \`Dear \${profile.full_name},\\n\\n\${customMessage}\\n\\n\${district}Login at: \${appLink}\\n\\nThank you,\\nChurch of Pentecost Canada Inc — Accounting System\`;
+
+    // Send via Supabase Auth email (magic link trick) — or swap for Resend/SendGrid
+    await admin.auth.admin.generateLink({
+      type: 'magiclink', email,
+      options: { data: {} }
+    });
+    // For a proper transactional email, replace above with your preferred email API.
+    // Example using Resend (add RESEND_API_KEY to secrets):
+    // await fetch('https://api.resend.com/emails', {
+    //   method: 'POST',
+    //   headers: { 'Authorization': 'Bearer ' + Deno.env.get('RESEND_API_KEY'), 'Content-Type': 'application/json' },
+    //   body: JSON.stringify({ from: 'accounting@copcanada.org', to: email, subject: 'Weekly Reminder — Enter District Transactions', text })
+    // });
+    sent++;
+  }
+
+  return new Response(JSON.stringify({ sent, total: profiles.length }), {
+    headers: { 'Content-Type': 'application/json' }
+  });
+});`;
+
+  const cronSql = `-- Enable pg_cron and pg_net extensions (run once)
+CREATE EXTENSION IF NOT EXISTS pg_cron;
+CREATE EXTENSION IF NOT EXISTS pg_net;
+
+-- Schedule reminder every Tuesday at 9:00 AM UTC
+SELECT cron.schedule(
+  'cop-weekly-reminder',
+  '0 9 * * 2',
+  $$
+  SELECT net.http_post(
+    url := 'https://${projectId}.supabase.co/functions/v1/send-reminders',
+    headers := '{"Content-Type":"application/json","Authorization":"Bearer ${SUPABASE_ANON_KEY}"}'::jsonb,
+    body := '{}'::jsonb
+  );
+  $$
+);
+
+-- To verify the job was created:
+-- SELECT * FROM cron.job;
+
+-- To remove the job later:
+-- SELECT cron.unschedule('cop-weekly-reminder');`;
+
+  document.getElementById('edge-fn-code').textContent = edgeFn;
+  document.getElementById('cron-sql-code').textContent = cronSql;
+}
+
+async function loadReminderRecipients() {
+  const el = document.getElementById('reminder-recipients');
+  el.innerHTML = '<span class="text-gray-400 italic">Loading…</span>';
+  const { data, error } = await sb.from('profiles').select('full_name,district').eq('is_active', true).eq('is_approved', true).order('full_name');
+  if (error || !data?.length) {
+    el.innerHTML = '<span class="text-red-500">Could not load users.</span>';
+    return;
+  }
+  el.innerHTML = data.map(u =>
+    `<div class="flex justify-between py-0.5 border-b border-gray-100">
+      <span class="font-medium text-gray-700">${u.full_name}</span>
+      <span class="text-gray-400">${u.district || 'No district'}</span>
+    </div>`
+  ).join('') + `<div class="pt-2 text-gray-500 font-semibold">${data.length} recipient(s)</div>`;
+}
+
+async function sendTestReminder() {
+  const message = document.getElementById('reminder-message').value.trim();
+  if (!message) { toast('Please enter a reminder message.', 'error'); return; }
+  const btn = event.target;
+  btn.disabled = true; btn.textContent = 'Sending…';
+
+  try {
+    const projectId = SUPABASE_URL.replace('https://','').split('.')[0];
+    const fnUrl = `${SUPABASE_URL}/functions/v1/send-reminders`;
+    const res = await fetch(fnUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` },
+      body: JSON.stringify({ message })
+    });
+    if (res.ok) {
+      const result = await res.json().catch(() => ({}));
+      toast(`Reminder sent to ${result.sent ?? '?'} user(s).`, 'success');
+    } else {
+      const txt = await res.text();
+      toast('Edge Function not deployed yet. See "View Setup Instructions" to set it up first.', 'error');
+    }
+  } catch(e) {
+    toast('Could not reach Edge Function. Follow setup instructions first.', 'error');
+  }
+  btn.disabled = false; btn.textContent = 'Send Test Email Now';
+}
+
 // UTILITIES
 // ══════════════════════════════════════════════
 async function doBackup() {
@@ -6421,10 +6955,42 @@ async function loadUsers() {
   if(error){toast('Error: '+error.message,'error');return;}
   usersData=data||[];
   renderUsers();
+  // Update sidebar pending badge
+  const pendingCount = (data||[]).filter(u => u.is_approved === false).length;
+  const sideBadge = document.getElementById('sidebar-pending-badge');
+  if (sideBadge) {
+    sideBadge.textContent = pendingCount || '';
+    sideBadge.style.display = pendingCount > 0 ? 'inline' : 'none';
+  }
 }
 
 function renderUsers() {
-  const rows=usersData.map(u=>`<tr>
+  const pending  = usersData.filter(u => u.is_approved === false);
+  const approved = usersData.filter(u => u.is_approved !== false);
+
+  // ── Pending approvals section ──
+  const pendingSection = document.getElementById('pending-approvals-section');
+  const pendingBadge   = document.getElementById('pending-badge');
+  const pendingTbody   = document.getElementById('pending-tbody');
+  if (pending.length > 0) {
+    pendingSection.style.display = '';
+    pendingBadge.textContent = pending.length + ' pending';
+    pendingTbody.innerHTML = pending.map(u => `<tr style="background:#fff7ed;">
+      <td class="font-semibold text-orange-800">${u.full_name}</td>
+      <td class="text-xs">${u.district||'—'}</td>
+      <td><span class="text-xs font-semibold px-2 py-0.5 rounded-full" style="background:#dbeafe;color:#1d4ed8">${u.role}</span></td>
+      <td class="flex gap-2 text-xs flex-wrap py-2">
+        <button class="btn-primary text-xs" style="padding:3px 10px;" onclick="approveUser('${u.id}','${u.full_name.replace(/'/g,"\\'")}')">✓ Approve</button>
+        <button class="btn-secondary text-xs" style="padding:3px 10px;color:#dc2626;border-color:#dc2626;" onclick="rejectUser('${u.id}','${u.full_name.replace(/'/g,"\\'")}')">✗ Reject</button>
+        <button class="text-blue-600 hover:underline" onclick='openEditUser(${JSON.stringify(u).replace(/'/g,"&#39;")})'>Edit Role</button>
+      </td>
+    </tr>`).join('');
+  } else {
+    pendingSection.style.display = 'none';
+  }
+
+  // ── Approved / active users ──
+  const rows = approved.map(u=>`<tr>
     <td class="font-medium">${u.full_name}</td>
     <td class="text-xs text-gray-500">${u.id.slice(0,12)}…</td>
     <td><span class="text-xs font-semibold px-2 py-0.5 rounded-full" style="background:#dbeafe;color:#1d4ed8">${u.role}</span></td>
@@ -6436,7 +7002,24 @@ function renderUsers() {
       ${u.is_active!==false?`<button class="text-red-500 hover:underline" onclick="toggleUserActive('${u.id}',false)">Deactivate</button>`:`<button class="text-green-600 hover:underline" onclick="toggleUserActive('${u.id}',true)">Activate</button>`}
     </td>
   </tr>`).join('');
-  document.getElementById('users-tbody').innerHTML=rows||'<tr><td colspan="6" class="text-center py-8 text-gray-400">No users found.</td></tr>';
+  document.getElementById('users-tbody').innerHTML=rows||'<tr><td colspan="6" class="text-center py-8 text-gray-400">No approved users found.</td></tr>';
+}
+
+async function approveUser(id, name) {
+  const {error} = await sb.from('profiles').update({ is_approved: true, is_active: true }).eq('id', id);
+  if (error) { toast('Error: '+error.message, 'error'); return; }
+  await logAction('APPROVE_USER','profiles',id,null,{approved:true});
+  toast(`${name} has been approved and can now sign in.`, 'success');
+  await loadUsers();
+}
+
+async function rejectUser(id, name) {
+  if (!confirm(`Reject and delete account for ${name}? This cannot be undone.`)) return;
+  const {error} = await sb.from('profiles').delete().eq('id', id);
+  if (error) { toast('Error: '+error.message, 'error'); return; }
+  await logAction('REJECT_USER','profiles',id,null,{rejected:true});
+  toast(`${name}'s account has been rejected and removed.`, 'success');
+  await loadUsers();
 }
 
 function openUserForm() {
