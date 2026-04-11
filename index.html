@@ -957,6 +957,39 @@ tailwind.config = {
     </div>
   </div>
 
+  <!-- Auto Backup Settings -->
+  <div class="card p-5 mb-4" style="border-left:4px solid #16a34a;">
+    <div class="flex items-center justify-between flex-wrap gap-3 mb-3">
+      <div class="flex items-center gap-3">
+        <span style="font-size:1.6rem;">⏰</span>
+        <div>
+          <div class="font-bold text-gray-800">Automatic Daily Backup</div>
+          <p class="text-xs text-gray-500 mt-0.5" id="auto-backup-status-text">Automatically downloads a backup file every day when you open the app.</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-3">
+        <span class="text-xs text-gray-500">Last backup: <strong id="auto-backup-last">Never</strong></span>
+        <label class="flex items-center gap-2 cursor-pointer">
+          <span class="text-sm font-semibold text-gray-700">Enable</span>
+          <div style="position:relative;display:inline-block;width:44px;height:24px;">
+            <input type="checkbox" id="auto-backup-toggle" onchange="toggleAutoBackup()" style="opacity:0;width:0;height:0;position:absolute;">
+            <span id="auto-backup-slider" style="position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:#d1d5db;border-radius:24px;transition:background 0.2s;">
+              <span style="position:absolute;content:'';height:18px;width:18px;left:3px;bottom:3px;background:white;border-radius:50%;transition:transform 0.2s;display:block;" id="auto-backup-knob"></span>
+            </span>
+          </div>
+        </label>
+      </div>
+    </div>
+    <div class="flex items-center gap-3 flex-wrap">
+      <span class="text-xs text-gray-600 font-semibold">Backup time:</span>
+      <select id="auto-backup-hour" class="form-input text-xs" style="width:auto;" onchange="saveAutoBackupSettings()">
+        ${Array.from({length:24},(_,i)=>`<option value="${i}">${String(i).padStart(2,'0')}:00</option>`).join('')}
+      </select>
+      <span class="text-xs text-gray-400">(triggers when you open the app after this hour each day)</span>
+      <button class="btn-primary text-xs" onclick="doBackup()">Download Now</button>
+    </div>
+  </div>
+
   <div class="grid md:grid-cols-3 gap-4 mb-6">
     <div class="card p-5">
       <div class="text-2xl mb-2">💾</div>
@@ -1702,6 +1735,8 @@ function startApp() {
   initCOACache();
   showScreen('dashboard');
   loadDashboard();
+  // Check auto backup after a short delay to let the app settle
+  setTimeout(checkAutoBackup, 5000);
   // For admins: check for pending signups and show sidebar badge
   if (role === 'admin') {
     sb.from('profiles').select('id').eq('is_approved', false).then(({ data }) => {
@@ -1742,7 +1777,7 @@ function showScreen(name) {
   if (name === 'users') loadUsers();
   if (name === 'ap') loadAP();
   if (name === 'ar') loadAR();
-  if (name === 'utilities') loadImportedRecords();
+  if (name === 'utilities') { loadImportedRecords(); loadAutoBackupSettings(); }
 }
 
 // ══════════════════════════════════════════════
@@ -7280,6 +7315,57 @@ async function doBackup() {
   localStorage.setItem('cop_ams_cache_time',backup.exported_at);
   await logAction('BACKUP','all','all');
   toast('Backup downloaded successfully!','success');
+}
+
+function toggleAutoBackup() {
+  const enabled = document.getElementById('auto-backup-toggle').checked;
+  const slider = document.getElementById('auto-backup-slider');
+  const knob = document.getElementById('auto-backup-knob');
+  slider.style.background = enabled ? '#16a34a' : '#d1d5db';
+  knob.style.transform = enabled ? 'translateX(20px)' : 'translateX(0)';
+  saveAutoBackupSettings();
+  toast(enabled ? 'Auto backup enabled.' : 'Auto backup disabled.', enabled ? 'success' : 'info');
+}
+
+function saveAutoBackupSettings() {
+  const enabled = document.getElementById('auto-backup-toggle').checked;
+  const hour = document.getElementById('auto-backup-hour').value;
+  localStorage.setItem('cop_auto_backup_enabled', enabled ? '1' : '0');
+  localStorage.setItem('cop_auto_backup_hour', hour);
+}
+
+function loadAutoBackupSettings() {
+  const enabled = localStorage.getItem('cop_auto_backup_enabled') === '1';
+  const hour = localStorage.getItem('cop_auto_backup_hour') || '8';
+  const lastBackup = localStorage.getItem('cop_auto_backup_last');
+  const toggle = document.getElementById('auto-backup-toggle');
+  const slider = document.getElementById('auto-backup-slider');
+  const knob = document.getElementById('auto-backup-knob');
+  const lastEl = document.getElementById('auto-backup-last');
+  const hourEl = document.getElementById('auto-backup-hour');
+  if (toggle) toggle.checked = enabled;
+  if (slider) slider.style.background = enabled ? '#16a34a' : '#d1d5db';
+  if (knob) knob.style.transform = enabled ? 'translateX(20px)' : 'translateX(0)';
+  if (hourEl) hourEl.value = hour;
+  if (lastEl) lastEl.textContent = lastBackup ? new Date(lastBackup).toLocaleDateString('en-CA', {year:'numeric',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : 'Never';
+}
+
+async function checkAutoBackup() {
+  const enabled = localStorage.getItem('cop_auto_backup_enabled') === '1';
+  if (!enabled) return;
+  const hour = parseInt(localStorage.getItem('cop_auto_backup_hour') || '8');
+  const lastBackup = localStorage.getItem('cop_auto_backup_last');
+  const now = new Date();
+  const todayKey = now.toISOString().split('T')[0];
+  const lastKey = lastBackup ? new Date(lastBackup).toISOString().split('T')[0] : null;
+  // Only run if: current hour >= scheduled hour AND haven't backed up today
+  if (now.getHours() >= hour && lastKey !== todayKey) {
+    await doBackup();
+    localStorage.setItem('cop_auto_backup_last', now.toISOString());
+    const lastEl = document.getElementById('auto-backup-last');
+    if (lastEl) lastEl.textContent = now.toLocaleDateString('en-CA', {year:'numeric',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+    toast('Automatic daily backup completed.', 'success', 5000);
+  }
 }
 
 async function doRestore() {
