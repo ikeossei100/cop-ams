@@ -7992,8 +7992,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const statusEl = document.getElementById('supabase-status');
     try {
       const res = await fetch(`${SUPABASE_URL}/rest/v1/`, { headers: { apikey: SUPABASE_ANON_KEY } });
-      if (res.ok || res.status === 400) {
-        // 400 is fine — it means Supabase is reachable but we hit root with no query
+      // Any HTTP response (including 401, 400) means Supabase is reachable
+      if (res.status < 500) {
         if (statusEl) {
           statusEl.textContent = '✓ Connected to database';
           statusEl.style.cssText = 'background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0;display:block;';
