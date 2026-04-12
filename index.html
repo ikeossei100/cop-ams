@@ -3955,7 +3955,10 @@ function reportUserFilter(q) {
   const role = currentProfile?.role;
   const uid  = myId();
   // Admin with a specific district selected
-  if (role === 'admin' && _rptUserFilter && _rptUserFilter !== 'all') return q.eq('district', _rptUserFilter);
+  if (role === 'admin' && _rptUserFilter && _rptUserFilter !== 'all') {
+    if (_rptUserFilter === '__none__') return q.is('district', null);
+    return q.eq('district', _rptUserFilter);
+  }
   // Admin with "all" → no filter
   if (role === 'admin') return q;
   // Non-admin: restrict to own district (or own data if no district)
@@ -3970,13 +3973,14 @@ async function populateRptUserFilter() {
   if (!sel) return;
   const { data } = await sb.from('profiles').select('district').eq('is_active', true);
   const prev = sel.value;
-  // Get unique non-null districts sorted alphabetically
-  const districts = [...new Set((data || []).map(u => u.district).filter(Boolean))].sort();
+  // Get unique districts sorted alphabetically, include "No District" for nulls
+  const rawDistricts = (data || []).map(u => u.district || '__none__');
+  const districts = [...new Set(rawDistricts)].sort((a,b) => a === '__none__' ? 1 : b === '__none__' ? -1 : a.localeCompare(b));
   sel.innerHTML = '<option value="all">All Districts (Combined)</option>';
   districts.forEach(d => {
     const opt = document.createElement('option');
     opt.value = d;
-    opt.textContent = d;
+    opt.textContent = d === '__none__' ? 'No District Assigned' : d;
     sel.appendChild(opt);
   });
   // Restore previous selection if still valid
