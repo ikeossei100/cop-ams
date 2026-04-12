@@ -921,9 +921,9 @@ tailwind.config = {
         </div>
       </div>
       <div id="rpt-user-wrapper" style="display:none;">
-        <label class="form-label">Filter by User</label>
+        <label class="form-label">Filter by District</label>
         <select id="rpt-user-filter" class="form-input w-52">
-          <option value="all">All Users (Combined)</option>
+          <option value="all">All Districts (Combined)</option>
         </select>
       </div>
       <button class="btn-primary text-xs" onclick="generateReport()">Generate</button>
@@ -3947,15 +3947,15 @@ async function finalizeReconciliation() {
 let activeReport=null;
 let _isReportCache = null;  // stores last IS data for clean PDF export
 let _bsReportCache = null; // stores last BS data for clean PDF export
-let _rptUserFilter = 'all'; // 'all' or a specific user UUID — set before each report run
+let _rptUserFilter = 'all'; // 'all' or a specific district name — set before each report run
 
-// Returns the right entered_by filter for report queries.
-// Admins can choose a specific user or "all". Non-admins are limited to their district.
+// Returns the right district filter for report queries.
+// Admins can choose a specific district or "all". Non-admins are limited to their own district.
 function reportUserFilter(q) {
   const role = currentProfile?.role;
   const uid  = myId();
-  // Admin with a specific user selected
-  if (role === 'admin' && _rptUserFilter && _rptUserFilter !== 'all') return q.eq('entered_by', _rptUserFilter);
+  // Admin with a specific district selected
+  if (role === 'admin' && _rptUserFilter && _rptUserFilter !== 'all') return q.eq('district', _rptUserFilter);
   // Admin with "all" → no filter
   if (role === 'admin') return q;
   // Non-admin: restrict to own district (or own data if no district)
@@ -3964,17 +3964,19 @@ function reportUserFilter(q) {
   return q;
 }
 
-// Populate the user-filter dropdown in reports (admin only)
+// Populate the district-filter dropdown in reports (admin only)
 async function populateRptUserFilter() {
   const sel = document.getElementById('rpt-user-filter');
   if (!sel) return;
-  const { data } = await sb.from('profiles').select('id,full_name,district').eq('is_active', true).order('full_name');
+  const { data } = await sb.from('profiles').select('district').eq('is_active', true);
   const prev = sel.value;
-  sel.innerHTML = '<option value="all">All Users (Combined)</option>';
-  (data || []).forEach(u => {
+  // Get unique non-null districts sorted alphabetically
+  const districts = [...new Set((data || []).map(u => u.district).filter(Boolean))].sort();
+  sel.innerHTML = '<option value="all">All Districts (Combined)</option>';
+  districts.forEach(d => {
     const opt = document.createElement('option');
-    opt.value = u.id;
-    opt.textContent = u.full_name + (u.district ? ` — ${u.district}` : '');
+    opt.value = d;
+    opt.textContent = d;
     sel.appendChild(opt);
   });
   // Restore previous selection if still valid
@@ -4026,7 +4028,7 @@ async function generateReport() {
   // Capture user filter selection before running (admin only; otherwise always own data)
   _rptUserFilter = (currentProfile?.role === 'admin')
     ? (document.getElementById('rpt-user-filter')?.value || 'all')
-    : (myId() || 'all');
+    : 'all';
   document.getElementById('report-output').style.display='block';
   const content=document.getElementById('report-content');
   content.innerHTML='<div class="text-center text-gray-400 py-8">Generating report…</div>';
