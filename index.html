@@ -1739,7 +1739,7 @@ function startApp() {
   setTimeout(checkAutoBackup, 5000);
   // For admins: check for pending signups and show sidebar badge
   if (role === 'admin') {
-    sb.from('profiles').select('id').eq('is_approved', false).then(({ data }) => {
+    sb.from('profiles').select('id').or('is_approved.eq.false,is_approved.is.null').then(({ data }) => {
       const count = (data||[]).length;
       const badge = document.getElementById('sidebar-pending-badge');
       if (badge) { badge.textContent = count||''; badge.style.display = count > 0 ? 'inline' : 'none'; }
@@ -7462,7 +7462,7 @@ async function loadUsers() {
   usersData=data||[];
   renderUsers();
   // Update sidebar pending badge
-  const pendingCount = (data||[]).filter(u => u.is_approved === false).length;
+  const pendingCount = (data||[]).filter(u => u.is_approved === false || u.is_approved === null).length;
   const sideBadge = document.getElementById('sidebar-pending-badge');
   if (sideBadge) {
     sideBadge.textContent = pendingCount || '';
@@ -7471,8 +7471,9 @@ async function loadUsers() {
 }
 
 function renderUsers() {
-  const pending  = usersData.filter(u => u.is_approved === false);
-  const approved = usersData.filter(u => u.is_approved !== false);
+  // Treat NULL and false both as pending (handles cases where column default varies)
+  const pending  = usersData.filter(u => u.is_approved === false || u.is_approved === null);
+  const approved = usersData.filter(u => u.is_approved === true);
 
   // ── Pending approvals section ──
   const pendingSection = document.getElementById('pending-approvals-section');
