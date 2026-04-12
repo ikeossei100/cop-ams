@@ -2735,7 +2735,7 @@ function openContribForm(id) {
     <div><label class="form-label">Description</label><input id="cf-desc" class="form-input" value="${c?.description||''}" placeholder="e.g. Sunday Service Offering"></div>
     <div class="grid grid-cols-2 gap-3">
       <div><label class="form-label">Amount (CAD) *</label><input type="number" step="0.01" id="cf-amt" class="form-input" value="${c?.amount||''}" placeholder="0.00"></div>
-      <div><label class="form-label">District</label><input id="cf-dist" class="form-input" value="${c?.district||''}" placeholder="e.g. Toronto Central"></div>
+      <div><label class="form-label">District</label><input id="cf-dist" class="form-input" value="${c?.district||currentProfile?.district||''}" placeholder="e.g. Toronto Central"></div>
     </div>
     <div><label class="form-label">Notes</label><textarea id="cf-notes" class="form-input" rows="2" placeholder="Optional notes">${c?.notes||''}</textarea></div>
   </div>`,
