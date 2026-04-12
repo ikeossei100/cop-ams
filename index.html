@@ -2565,6 +2565,7 @@ function renderContributions() {
       <td class="flex gap-1 flex-wrap text-xs">
         ${c.status==='draft'&&canEnter?`<button class="text-blue-600 hover:underline" onclick="openContribForm('${c.id}')">Edit</button>`:''}
         ${c.status==='draft'&&canPost?`<button class="text-green-600 hover:underline" onclick="postContrib('${c.id}')">Post</button>`:''}
+        ${c.status==='posted'&&canPost?`<button class="text-orange-500 hover:underline" onclick="editContribRefNo('${c.id}','${(c.ref_no||'').replace(/'/g,"\\'")}')">Edit Ref#</button>`:''}
         ${c.status==='posted'&&canPost?`<button class="text-red-500 hover:underline" onclick="reverseContrib('${c.id}')">Reverse</button>`:''}
         <button class="text-gray-500 hover:underline" onclick="viewContribDetail('${c.id}')">View</button>
       </td>
@@ -3228,6 +3229,34 @@ async function createContribJournal(contrib) {
   const { data, error } = await sb.from('journals').insert(jnlPayload).select('id').single();
   if (error) { console.warn('Journal create error:', error.message); return null; }
   return data?.id || null;
+}
+
+function editContribRefNo(id, currentRef) {
+  openModal('Edit Contribution Number',
+    `<div class="space-y-4">
+      <p class="text-sm text-gray-600">Update the reference / contribution number for this posted contribution. All other fields remain unchanged.</p>
+      <div>
+        <label class="form-label">Contribution / Reference Number</label>
+        <input id="edit-ref-input" class="form-input" value="${currentRef}" placeholder="e.g. REF-2026-001">
+      </div>
+      <div id="edit-ref-err" class="hidden text-sm text-red-600 font-medium"></div>
+    </div>`,
+    `<button class="btn-secondary" onclick="closeModal()">Cancel</button>
+     <button class="btn-primary" onclick="saveContribRefNo('${id}')">Save</button>`
+  );
+  setTimeout(() => document.getElementById('edit-ref-input')?.focus(), 100);
+}
+
+async function saveContribRefNo(id) {
+  const val = document.getElementById('edit-ref-input')?.value.trim();
+  const errEl = document.getElementById('edit-ref-err');
+  if (!val) { errEl.textContent = 'Please enter a reference number.'; errEl.classList.remove('hidden'); return; }
+  const { error } = await sb.from('contributions').update({ ref_no: val }).eq('id', id);
+  if (error) { errEl.textContent = 'Error: ' + error.message; errEl.classList.remove('hidden'); return; }
+  await logAction('EDIT_REF_NO', 'contributions', id, null, { ref_no: val });
+  closeModal();
+  toast('Contribution number updated.', 'success');
+  loadContributions();
 }
 
 async function postContrib(id) {
