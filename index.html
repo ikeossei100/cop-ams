@@ -4543,10 +4543,23 @@ async function genNationalSummary(from, to) {
   ];
 
   // Build totals from journals + contributions
-  const accountTotals = {}; // code → amount (CR is positive for income)
+  // IS-IMPORT posts income accounts as DB (special convention) — treat as positive
+  const importRefs = new Set(['IS-IMPORT', 'OB-IMPORT']);
+  const accountTotals = {}; // code → amount (positive = income)
   journals.forEach(j => (j.lines||[]).forEach(l => {
     const amt = parseFloat(l.amount) || 0;
-    accountTotals[l.account_code] = (accountTotals[l.account_code]||0) + (l.dc==='CR' ? amt : -amt);
+    const code = l.account_code || '';
+    const isImport = importRefs.has(j.ref_no);
+    const isIncome = code.startsWith('4');
+    let contribution;
+    if (isImport && isIncome) {
+      // IS-IMPORT: income posted as DB — treat as positive income
+      contribution = l.dc === 'DB' ? amt : -amt;
+    } else {
+      // Normal journals: income is CR
+      contribution = l.dc === 'CR' ? amt : -amt;
+    }
+    accountTotals[code] = (accountTotals[code]||0) + contribution;
   }));
   contribs.forEach(c => {
     const amt = parseFloat(c.amount) || 0;
