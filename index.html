@@ -4615,50 +4615,59 @@ async function genNationalSummary(from, to) {
   ];
 
   const importRefs = new Set(['IS-IMPORT', 'OB-IMPORT']);
+
+  // When district selected, only include contributions from that district
+  const filteredContribs = districtSelected
+    ? contribs.filter(c => (c.district || '').trim().toLowerCase() === _rptUserFilter.trim().toLowerCase())
+    : contribs;
+
+  // accountTotals from contributions (district-filtered for non-tithes categories)
   const accountTotals = {};
-
-  // Process journals
-  journals.forEach(j => (j.lines||[]).forEach(l => {
-    const amt = parseFloat(l.amount) || 0;
-    const code = l.account_code || '';
-    const isImport = importRefs.has(j.ref_no);
-    const val = (isImport && code.startsWith('4')) ? (l.dc==='DB'?amt:-amt) : (l.dc==='CR'?amt:-amt);
-    accountTotals[code] = (accountTotals[code]||0) + val;
-  }));
-
-  // Process contributions — keyed by district sub-code
-  // If posted to a sub-code (4051, 4055 etc) → use that code
-  // If posted to parent 4020 → look up district name to find the right sub-code
-  const districtCodeTotals = {}; // sub-code → amount
-  let importedTotal = 0;
-
-  contribs.forEach(c => {
+  filteredContribs.forEach(c => {
     const amt = parseFloat(c.amount) || 0;
     accountTotals[c.account_code] = (accountTotals[c.account_code]||0) + amt;
-    if (!tithesAllCodes.has(c.account_code)) return;
+  });
 
+  // Also add journal totals (for IS-IMPORT etc) — not district-filtered
+  if (!districtSelected) {
+    journals.forEach(j => (j.lines||[]).forEach(l => {
+      const amt = parseFloat(l.amount) || 0;
+      const code = l.account_code || '';
+      const isImport = importRefs.has(j.ref_no);
+      const val = (isImport && code.startsWith('4')) ? (l.dc==='DB'?amt:-amt) : (l.dc==='CR'?amt:-amt);
+      accountTotals[code] = (accountTotals[code]||0) + val;
+    }));
+  }
+
+  // Tithes: build per-district-account totals from contributions
+  const districtCodeTotals = {};
+  let importedTotal = 0;
+
+  filteredContribs.forEach(c => {
+    const amt = parseFloat(c.amount) || 0;
+    if (!tithesAllCodes.has(c.account_code)) return;
     if (c.account_code === '4020') {
-      // Posted to parent — attribute by district name
       const distName = (c.district || '').trim().toLowerCase();
       const acct = nameToAccount[distName];
       const code = acct ? acct.code : '4020';
       districtCodeTotals[code] = (districtCodeTotals[code]||0) + amt;
     } else {
-      // Posted to specific district sub-code
       districtCodeTotals[c.account_code] = (districtCodeTotals[c.account_code]||0) + amt;
     }
   });
 
-  // IS-IMPORT tithes → imported bucket
-  journals.forEach(j => {
-    if (!importRefs.has(j.ref_no)) return;
-    (j.lines||[]).forEach(l => {
-      if (!tithesAllCodes.has(l.account_code)) return;
-      const amt = parseFloat(l.amount) || 0;
-      const val = l.dc === 'DB' ? amt : -amt;
-      if (val > 0) importedTotal += val;
+  // IS-IMPORT tithes (all-districts, only shown when no district filter)
+  if (!districtSelected) {
+    journals.forEach(j => {
+      if (!importRefs.has(j.ref_no)) return;
+      (j.lines||[]).forEach(l => {
+        if (!tithesAllCodes.has(l.account_code)) return;
+        const amt = parseFloat(l.amount) || 0;
+        const val = l.dc === 'DB' ? amt : -amt;
+        if (val > 0) importedTotal += val;
+      });
     });
-  });
+  }
 
 
   const fmt2 = n => '$' + Math.max(0,n).toLocaleString('en-CA',{minimumFractionDigits:2,maximumFractionDigits:2});
