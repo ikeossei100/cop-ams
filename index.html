@@ -7609,8 +7609,9 @@ let usersData=[];
 
 async function loadUsers() {
   const {data,error}=await sb.from('profiles').select('*').order('full_name');
-  if(error){toast('Error: '+error.message,'error');return;}
+  if(error){toast('Error loading users: '+error.message+' ('+error.code+')','error');console.error('loadUsers error',error);return;}
   usersData=data||[];
+  console.log('loadUsers: fetched',usersData.length,'users, pending=',usersData.filter(u=>!u.is_approved).map(u=>({name:u.full_name,approved:u.is_approved})));
   renderUsers();
   // Update sidebar pending badge
   const pendingCount = (data||[]).filter(u => !u.is_approved).length;
