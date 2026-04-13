@@ -3948,21 +3948,41 @@ async function finalizeReconciliation() {
 let activeReport=null;
 let _isReportCache = null;  // stores last IS data for clean PDF export
 let _bsReportCache = null; // stores last BS data for clean PDF export
-let _rptUserFilter = 'all'; // 'all' or a specific district name — set before each report run
+let _rptUserFilter = 'all'; // 'all' or a specific district name
+let _rptDistrictUids = null; // user IDs belonging to the selected district
 
-// Returns the right district filter for report queries.
-// Admins can choose a specific district or "all". Non-admins are limited to their own district.
+// Call this before running reports when a district is selected
+async function loadRptDistrictUids(district) {
+  if (!district || district === 'all') { _rptDistrictUids = null; return; }
+  if (district === '__none__') { _rptDistrictUids = []; return; }
+  const { data } = await sb.from('profiles').select('id').eq('district', district).eq('is_active', true);
+  _rptDistrictUids = (data || []).map(u => u.id);
+}
+
+// Returns the right filter for report queries — handles both contributions (district column) and journals (entered_by).
 function reportUserFilter(q) {
   const role = currentProfile?.role;
   const uid  = myId();
-  // Admin with a specific district selected
+  const tableName = q._url ? (q._url.toString().includes('/contributions') ? 'contributions' : 'journals') : '';
+
   if (role === 'admin' && _rptUserFilter && _rptUserFilter !== 'all') {
-    if (_rptUserFilter === '__none__') return q.is('district', null);
-    return q.eq('district', _rptUserFilter);
+    const district = _rptUserFilter;
+    if (district === '__none__') {
+      // Contributions: filter by null district; journals: filter by users with no district
+      if (_rptDistrictUids !== null && _rptDistrictUids.length === 0) return q.is('entered_by', null);
+      return q.is('district', null);
+    }
+    // For contributions — filter directly by district column
+    // For journals — filter by entered_by (users in that district)
+    if (_rptDistrictUids && _rptDistrictUids.length > 0) {
+      // Try district column first (contributions), fall back to entered_by (journals)
+      return q.or(`district.eq.${district},entered_by.in.(${_rptDistrictUids.join(',')})`);
+    }
+    return q.eq('district', district);
   }
   // Admin with "all" → no filter
   if (role === 'admin') return q;
-  // Non-admin: restrict to own district (or own data if no district)
+  // Non-admin: restrict to own district
   if (_districtUids && _districtUids.length > 0) return q.in('entered_by', _districtUids);
   if (uid) return q.eq('entered_by', uid);
   return q;
@@ -4034,6 +4054,8 @@ async function generateReport() {
   _rptUserFilter = (currentProfile?.role === 'admin')
     ? (document.getElementById('rpt-user-filter')?.value || 'all')
     : 'all';
+  // Pre-load user IDs for the selected district so journal filtering works
+  await loadRptDistrictUids(_rptUserFilter);
   document.getElementById('report-output').style.display='block';
   const content=document.getElementById('report-content');
   content.innerHTML='<div class="text-center text-gray-400 py-8">Generating report…</div>';
