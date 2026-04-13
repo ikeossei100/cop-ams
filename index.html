@@ -4561,14 +4561,17 @@ async function genNationalSummary(from, to) {
   const journals = jnlRes.data || [];
   const contribs = conRes.data || [];
 
-  // District accounts (children of 4020) + 4020 itself
+  // District accounts (children of 4020 only — not 4020 itself to avoid double counting)
   const districtCodes = coaCache
-    .filter(a => (a.parent_code === '4020' || a.code === '4020') && a.active !== false)
+    .filter(a => a.parent_code === '4020' && a.active !== false)
     .sort((a,b) => (a.sort_order||0)-(b.sort_order||0));
 
-  // The 5 summary categories — include 4020 group code directly in tithes
+  // All codes for tithes total: children + 4020 itself (for direct postings)
+  // De-duplicate to prevent double counting
+  const tithesCodes = [...new Set(['4020', ...districtCodes.map(a=>a.code)])];
+
   const CATEGORIES = [
-    { key:'tithes',   label:'Tithes & Offering',          codes: ['4020', ...districtCodes.map(a=>a.code)], perDistrict: true },
+    { key:'tithes',   label:'Tithes & Offering',          codes: tithesCodes, perDistrict: true },
     { key:'mission',  label:'Missionary Offering',         codes: ['4421'], perDistrict: false },
     { key:'mckeown',  label:"McKeown's Week Offering",     codes: ['4422'], perDistrict: false },
     { key:'easter',   label:'Easter Convention Offering',  codes: ['4102'], perDistrict: false },
@@ -4607,6 +4610,7 @@ async function genNationalSummary(from, to) {
   const cacheCategories = [];
 
   CATEGORIES.forEach(cat => {
+    // For tithes: sum children + any direct 4020 postings (already de-duped in tithesCodes)
     const catTotal = cat.codes.reduce((s,c) => s + Math.max(0, accountTotals[c]||0), 0);
     grandTotal += catTotal;
 
@@ -4615,10 +4619,13 @@ async function genNationalSummary(from, to) {
 
     if (cat.perDistrict) {
       // Show each district sorted highest to lowest
-      const distRows = districtCodes
-        .map(a => ({ name: a.name, code: a.code, amt: Math.max(0, accountTotals[a.code]||0) }))
-        .filter(r => r.amt > 0)
-        .sort((a,b) => b.amt - a.amt);
+      // Also include 4020 direct postings as "General Tithes & Offering" if any
+      const direct4020 = Math.max(0, accountTotals['4020']||0);
+      const allRows = [
+        ...districtCodes.map(a => ({ name: a.name, code: a.code, amt: Math.max(0, accountTotals[a.code]||0) })),
+        ...(direct4020 > 0 ? [{ name: 'General Tithes & Offering', code: '4020', amt: direct4020 }] : [])
+      ];
+      const distRows = allRows.filter(r => r.amt > 0).sort((a,b) => b.amt - a.amt);
 
       cacheRows = distRows;
       if (distRows.length === 0) {
