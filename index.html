@@ -4566,9 +4566,8 @@ async function genNationalSummary(from, to) {
     .filter(a => a.parent_code === '4020' && a.active !== false)
     .sort((a,b) => (a.sort_order||0)-(b.sort_order||0));
 
-  // All codes for tithes total: children + 4020 itself (for direct postings)
-  // De-duplicate to prevent double counting
-  const tithesCodes = [...new Set(['4020', ...districtCodes.map(a=>a.code)])];
+  // Tithes total: only district sub-accounts (children of 4020)
+  const tithesCodes = districtCodes.map(a => a.code);
 
   const CATEGORIES = [
     { key:'tithes',   label:'Tithes & Offering',          codes: tithesCodes, perDistrict: true },
@@ -4619,13 +4618,11 @@ async function genNationalSummary(from, to) {
 
     if (cat.perDistrict) {
       // Show each district sorted highest to lowest
-      // Also include 4020 direct postings as "General Tithes & Offering" if any
-      const direct4020 = Math.max(0, accountTotals['4020']||0);
-      const allRows = [
-        ...districtCodes.map(a => ({ name: a.name, code: a.code, amt: Math.max(0, accountTotals[a.code]||0) })),
-        ...(direct4020 > 0 ? [{ name: 'General Tithes & Offering', code: '4020', amt: direct4020 }] : [])
-      ];
-      const distRows = allRows.filter(r => r.amt > 0).sort((a,b) => b.amt - a.amt);
+      // Only show district sub-accounts (children of 4020), not 4020 itself
+      const distRows = districtCodes
+        .map(a => ({ name: a.name, code: a.code, amt: Math.max(0, accountTotals[a.code]||0) }))
+        .filter(r => r.amt > 0)
+        .sort((a,b) => b.amt - a.amt);
 
       cacheRows = distRows;
       if (distRows.length === 0) {
