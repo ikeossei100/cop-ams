@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>COP AMS — Church of Pentecost Accounting</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.50.0/dist/umd/supabase.min.js"></script>
@@ -641,9 +644,10 @@ tailwind.config = {
     <div style="background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:8px;padding:10px 14px;margin-bottom:14px;">
       <p class="text-xs font-semibold text-blue-800 mb-1">Required columns in your file (any order, headers must match exactly):</p>
       <div class="grid grid-cols-2 md:grid-cols-4 gap-1 text-xs text-blue-700 font-mono">
-        <span>date</span><span>account_code</span><span>amount</span><span>contributor_name</span>
-        <span>envelope_number</span><span>district</span><span>description</span><span>ref_no</span>
-        <span>bank_account_code</span><span>contributor_phone</span><span>contributor_email</span><span>contributor_address</span>
+        <span>date</span><span>contributor_name</span><span>envelope_number</span><span>ref_no</span>
+        <span>account_code</span><span>bank_account_code</span><span>description</span><span>amount</span>
+        <span>district</span><span>contributor_phone</span><span>contributor_email</span><span>contributor_address</span>
+        <span>notes</span>
       </div>
       <p class="text-xs text-blue-600 mt-2">Only <strong>date</strong> and <strong>amount</strong> are required when a default account is selected below. Date format: <strong>YYYY-MM-DD</strong>. Download the template for a ready-to-fill example.</p>
     </div>
@@ -859,11 +863,19 @@ tailwind.config = {
       <div class="text-xs text-gray-400 mt-1">All journal entries by date</div>
     </div>
     <div class="card p-4 cursor-pointer hover:border-[#0284c7] hover:border-2 transition-colors md:col-span-4" onclick="runReport('national-summary')" style="border:2px solid #0284c7;background:linear-gradient(135deg,#f0f9ff,#e0f2fe);">
-      <div class="flex items-center gap-3">
-        <span style="font-size:2rem;">🇨🇦</span>
-        <div>
-          <div class="font-bold text-sm" style="color:#1a3c8f;">National Offering Summary — All Districts</div>
-          <div class="text-xs text-gray-500 mt-0.5">Tithes &amp; Offering · Missionary Offering · McKeown's Week · Easter Convention · Christmas Convention — combined totals across all districts</div>
+      <div class="flex items-center justify-between flex-wrap gap-3">
+        <div class="flex items-center gap-3">
+          <span style="font-size:2rem;">🇨🇦</span>
+          <div>
+            <div class="font-bold text-sm" style="color:#1a3c8f;">National Offering Summary — All Districts</div>
+            <div class="text-xs text-gray-500 mt-0.5">Tithes &amp; Offering · Missionary Offering · McKeown's Week · Easter Convention · Christmas Convention — combined totals across all districts</div>
+          </div>
+        </div>
+        <div onclick="event.stopPropagation()" style="background:#fffbeb;border:1.5px solid #f59e0b;border-radius:8px;padding:8px 14px;">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;white-space:nowrap;">
+            <input type="checkbox" id="rpt-include-drafts" style="width:16px;height:16px;accent-color:#b45309;cursor:pointer;">
+            <span style="font-size:12px;font-weight:600;color:#92400e;">Include unposted drafts</span>
+          </label>
         </div>
       </div>
     </div>
@@ -2921,8 +2933,14 @@ async function downloadContribTemplate() {
   // ── Sheet 2: Contributions data entry ──
   const ws = wb.addWorksheet('Contributions');
 
-  const headers = ['date','account_code','amount','contributor_name','envelope_number','district','description','ref_no','bank_account_code','contributor_phone','contributor_email','contributor_address'];
-  const colWidths  = [14, 16, 12, 22, 16, 18, 36, 12, 18, 18, 28, 30];
+  // Column order mirrors the New Entry form:
+  // Contributor Details → Contribution Details
+  const headers = [
+    'date','contributor_name','envelope_number','contributor_phone','contributor_email',
+    'contributor_address','ref_no','account_code','bank_account_code','description',
+    'amount','district','notes'
+  ];
+  const colWidths = [14, 24, 16, 18, 28, 32, 12, 16, 18, 36, 12, 20, 30];
 
   const headerRow = ws.addRow(headers);
   headerRow.eachCell(cell => {
@@ -2933,28 +2951,38 @@ async function downloadContribTemplate() {
   });
   headers.forEach((_, i) => { ws.getColumn(i + 1).width = colWidths[i]; });
 
+  // Example row — column order must match headers above
   ws.addRow([
-    '2026-01-15',
-    incomeAccts[0]?.code || '4051',
-    '250.00', 'John Mensah', 'ENV-001', 'Toronto Central',
-    incomeAccts[0] ? `${incomeAccts[0].code} - ${incomeAccts[0].name}` : 'Sunday Offering',
-    'REF001', '1110', '416-555-0100', 'john@example.com', '123 Main St, Toronto ON'
+    '2026-01-15',                                             // date
+    'John Mensah',                                            // contributor_name
+    'ENV-001',                                                // envelope_number
+    '416-555-0100',                                           // contributor_phone
+    'john@example.com',                                       // contributor_email
+    '123 Main St, Toronto ON',                                // contributor_address
+    'REF001',                                                 // ref_no
+    incomeAccts[0]?.code || '4051',                           // account_code
+    '1110',                                                   // bank_account_code
+    incomeAccts[0] ? `${incomeAccts[0].name}` : 'Sunday Offering', // description
+    '250.00',                                                 // amount
+    'Toronto Central',                                        // district
+    ''                                                        // notes
   ]);
 
   ws.views = [{ state: 'frozen', ySplit: 1 }];
 
-  // ── Data validation: description column = G (index 7) ──
-  // Reference the hidden sheet directly — this is the only approach that works
-  // reliably in Excel for lists longer than 255 characters.
+  // ── Data validation: account_code column = H (index 8, col 8) ──
+  // Reference the hidden sheet directly — works reliably in Excel for long lists.
   const formula = `_AccountList!$A$1:$A$${listLastRow}`;
+  // account_code is column H (8th column, letter H)
+  const acctCol = 'H';
   for (let row = 2; row <= 500; row++) {
-    ws.getCell(`G${row}`).dataValidation = {
+    ws.getCell(`${acctCol}${row}`).dataValidation = {
       type: 'list',
       allowBlank: true,
       formulae: [formula],
       showInputMessage: true,
       promptTitle: 'Select Account',
-      prompt: 'Click the dropdown arrow to choose a contribution account.',
+      prompt: 'Click the dropdown arrow to choose a contribution account. The code before the dash will be used.',
       showErrorMessage: false,
     };
   }
@@ -2967,7 +2995,7 @@ async function downloadContribTemplate() {
   a.href = url; a.download = 'Contribution_Import_Template.xlsx';
   document.body.appendChild(a); a.click();
   document.body.removeChild(a); URL.revokeObjectURL(url);
-  toast('Template downloaded — click any cell in the description column to see the account dropdown.', 'success');
+  toast('Template downloaded — click any cell in the account_code column (H) to see the account dropdown.', 'success');
 }
 
 let _contribImportRows = [];  // parsed valid rows ready to import
@@ -3067,12 +3095,15 @@ function processContribSheet(wb) {
 
     const bank_account_code = String(r[col('bank_account_code')]||'1110').trim() || '1110';
 
+    // account_code may come as "4051 - Account Name" from the dropdown — extract just the code
+    const resolvedCode = acctCode.includes(' - ') ? acctCode.split(' - ')[0].trim() : acctCode;
+
     const row = {
       _rowNum: i + 1,
       _errors: rowErrors,
       _usedDefaultAcct: !rawAcct && !!defaultAcct, // flag if default was applied
       date,
-      account_code:        acctCode,
+      account_code:        resolvedCode,
       amount:              isNaN(amount) ? 0 : amount,
       contributor_name:    String(r[col('contributor_name')]||'').trim(),
       envelope_number:     String(r[col('envelope_number')]||'').trim(),
@@ -3083,6 +3114,7 @@ function processContribSheet(wb) {
       contributor_phone:   String(r[col('contributor_phone')]||'').trim(),
       contributor_email:   String(r[col('contributor_email')]||'').trim(),
       contributor_address: String(r[col('contributor_address')]||'').trim(),
+      notes:               String(r[col('notes')]||'').trim(),
     };
     if (rowErrors.length) errors.push(`Row ${row._rowNum}: ${rowErrors.join(', ')}`);
     valid.push(row);
@@ -3205,6 +3237,7 @@ async function confirmContribImport() {
       contributor_phone:   r.contributor_phone  || null,
       contributor_email:   r.contributor_email  || null,
       contributor_address: r.contributor_address|| null,
+      notes:               r.notes             || null,
       status:              postImmediately ? 'posted' : 'draft',
       entered_by:          uid,
     };
@@ -4079,7 +4112,7 @@ function runReport(type) {
   const userWrapper = document.getElementById('rpt-user-wrapper');
   if (userWrapper) {
     if (currentProfile?.role === 'admin') {
-      userWrapper.style.display = '';
+      userWrapper.style.display = 'block';
       populateRptUserFilter();
     } else {
       userWrapper.style.display = 'none';
@@ -4587,13 +4620,20 @@ async function genNationalSummary(from, to) {
 
   if (!coaCache || coaCache.length === 0) await initCOACache();
 
-  // Fetch all posted contributions and journals
-  const [jnlRes, conRes] = await Promise.all([
+  const includeDrafts = document.getElementById('rpt-include-drafts')?.checked === true;
+
+  // Fetch posted contributions, journals, and optionally drafts
+  const queries = [
     sb.from('journals').select('*').eq('status','posted').gte('date',from).lte('date',to),
-    sb.from('contributions').select('*').eq('status','posted').gte('date',from).lte('date',to)
-  ]);
+    sb.from('contributions').select('*').eq('status','posted').gte('date',from).lte('date',to),
+  ];
+  if (includeDrafts) {
+    queries.push(sb.from('contributions').select('*').eq('status','draft').gte('date',from).lte('date',to));
+  }
+  const [jnlRes, conRes, draftRes] = await Promise.all(queries);
   const journals = jnlRes.data || [];
   const contribs = conRes.data || [];
+  const draftContribs = includeDrafts ? (draftRes?.data || []) : [];
 
   // District sub-accounts (children of 4020)
   const districtAccounts = coaCache
@@ -4639,6 +4679,14 @@ async function genNationalSummary(from, to) {
     }));
   }
 
+  // Draft account totals — use ALL draft contributions unfiltered by district
+  // (district field may not be set on non-tithes entries; tithes filtering is done via account_code)
+  const draftAccountTotals = {};
+  draftContribs.forEach(c => {
+    const amt = parseFloat(c.amount) || 0;
+    draftAccountTotals[c.account_code] = (draftAccountTotals[c.account_code]||0) + amt;
+  });
+
   // Tithes: build per-district-account totals from contributions
   const districtCodeTotals = {};
   let importedTotal = 0;
@@ -4653,6 +4701,21 @@ async function genNationalSummary(from, to) {
       districtCodeTotals[code] = (districtCodeTotals[code]||0) + amt;
     } else {
       districtCodeTotals[c.account_code] = (districtCodeTotals[c.account_code]||0) + amt;
+    }
+  });
+
+  // Draft tithes per-district totals — built from ALL drafts, filtered during display
+  const draftDistrictCodeTotals = {};
+  draftContribs.forEach(c => {
+    const amt = parseFloat(c.amount) || 0;
+    if (!tithesAllCodes.has(c.account_code)) return;
+    if (c.account_code === '4020') {
+      const distName = (c.district || '').trim().toLowerCase();
+      const acct = nameToAccount[distName];
+      const code = acct ? acct.code : '4020';
+      draftDistrictCodeTotals[code] = (draftDistrictCodeTotals[code]||0) + amt;
+    } else {
+      draftDistrictCodeTotals[c.account_code] = (draftDistrictCodeTotals[c.account_code]||0) + amt;
     }
   });
 
@@ -4676,6 +4739,8 @@ async function genNationalSummary(from, to) {
   let grandTotal = 0;
   let sectionsHtml = '';
   const cacheCategories = [];
+
+  let draftGrandTotal = 0;
 
   CATEGORIES.forEach(cat => {
     // For tithes: sum from districtTotals (covers all entries regardless of which 4xxx code used)
@@ -4736,6 +4801,54 @@ async function genNationalSummary(from, to) {
       </tr>`;
     }
 
+    // ── Draft rows for this category ──
+    let draftRowsHtml = '';
+    let catDraftTotal = 0;
+    if (includeDrafts) {
+      if (cat.perDistrict) {
+        let draftDistRows = districtAccounts
+          .map(a => ({ code: a.code, name: a.name, amt: Math.max(0, draftDistrictCodeTotals[a.code]||0) }))
+          .filter(r => r.amt > 0);
+        const unmatchedDraft = Math.max(0, draftDistrictCodeTotals['4020']||0);
+        if (unmatchedDraft > 0) draftDistRows.push({ code:'4020', name:'Unclassified', amt: unmatchedDraft });
+        if (districtSelected) {
+          const selAcct = districtAccounts.find(a => a.name.trim().toLowerCase() === _rptUserFilter.trim().toLowerCase());
+          draftDistRows = selAcct ? draftDistRows.filter(r => r.code === selAcct.code) : draftDistRows;
+        }
+        draftDistRows.sort((a,b) => b.amt - a.amt);
+        catDraftTotal = draftDistRows.reduce((s,r) => s + r.amt, 0);
+        draftGrandTotal += catDraftTotal;
+        if (draftDistRows.length > 0) {
+          draftRowsHtml = draftDistRows.map(r => `<tr style="background:#fffbeb;">
+            <td class="text-xs text-amber-700 w-16">${r.code}</td>
+            <td class="text-sm text-amber-800">${r.name}</td>
+            <td class="text-right font-semibold text-amber-700">${fmt2(r.amt)}</td>
+          </tr>`).join('');
+        }
+      } else {
+        const code = cat.codes[0];
+        const acct = coaCache.find(a => a.code === code);
+        catDraftTotal = Math.max(0, draftAccountTotals[code]||0);
+        draftGrandTotal += catDraftTotal;
+        if (catDraftTotal > 0) {
+          draftRowsHtml = `<tr style="background:#fffbeb;">
+            <td class="text-xs text-amber-700 w-16">${code}</td>
+            <td class="text-sm text-amber-800">${acct?.name||cat.label}</td>
+            <td class="text-right font-semibold text-amber-700">${fmt2(catDraftTotal)}</td>
+          </tr>`;
+        }
+      }
+    }
+
+    const draftBlock = (includeDrafts && (draftRowsHtml || catDraftTotal === 0)) ? `
+      <tr><td colspan="3" style="padding:0;">
+        <div style="background:#fffbeb;border-top:1.5px dashed #f59e0b;padding:4px 10px;">
+          <span style="font-size:10px;font-weight:700;color:#b45309;text-transform:uppercase;letter-spacing:0.06em;">⏳ Pending — Unposted Drafts</span>
+          ${catDraftTotal > 0 ? `<span style="float:right;font-size:10px;font-weight:700;color:#b45309;">${fmt2(catDraftTotal)}</span>` : ''}
+        </div>
+      </td></tr>
+      ${draftRowsHtml || `<tr style="background:#fffbeb;"><td colspan="3" class="text-center text-amber-500 text-xs py-1.5">No draft entries in this period.</td></tr>`}` : '';
+
     cacheCategories.push({ label: cat.label, total: catTotal, rows: cacheRows });
 
     sectionsHtml += `
@@ -4751,7 +4864,7 @@ async function genNationalSummary(from, to) {
               <th style="padding:6px 10px;text-align:left;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.06em;">District / Account</th>
               <th style="padding:6px 10px;text-align:right;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.06em;">Amount (CAD)</th>
             </tr></thead>
-            <tbody>${rowsHtml}</tbody>
+            <tbody>${rowsHtml}${draftBlock}</tbody>
           </table>
         </div>
       </div>`;
@@ -4798,10 +4911,22 @@ async function genNationalSummary(from, to) {
 
     <!-- Grand Total -->
     <div class="flex justify-between items-center px-5 py-4 rounded-xl mt-2" style="background:linear-gradient(135deg,#1a3c8f,#0284c7);color:white;">
-      <span class="font-bold" style="font-size:1rem;letter-spacing:0.02em;">GRAND TOTAL — ALL OFFERINGS</span>
+      <span class="font-bold" style="font-size:1rem;letter-spacing:0.02em;">GRAND TOTAL — ALL OFFERINGS (POSTED)</span>
       <span class="font-bold" style="font-size:1.3rem;">${fmt2(grandTotal)}</span>
     </div>
-    <p class="text-xs text-gray-400 mt-3 italic text-right">Includes all posted contributions and journal entries. Generated: ${new Date().toLocaleString('en-CA')}.</p>`;
+    ${includeDrafts ? `
+    <div class="flex justify-between items-center px-5 py-3 rounded-xl mt-2" style="background:linear-gradient(135deg,#92400e,#b45309);color:white;opacity:0.92;">
+      <div>
+        <span class="font-bold" style="font-size:0.95rem;letter-spacing:0.02em;">⏳ PENDING DRAFTS (NOT YET POSTED)</span>
+        <div style="font-size:10px;opacity:0.8;margin-top:2px;">These amounts are not final — they require posting by an accountant or admin.</div>
+      </div>
+      <span class="font-bold" style="font-size:1.2rem;">${fmt2(draftGrandTotal)}</span>
+    </div>
+    <div class="flex justify-between items-center px-5 py-3 rounded-xl mt-2 border-2 border-dashed border-gray-400">
+      <span class="font-bold text-gray-600" style="font-size:0.9rem;">COMBINED TOTAL (Posted + Drafts)</span>
+      <span class="font-bold text-gray-700" style="font-size:1.1rem;">${fmt2(grandTotal + draftGrandTotal)}</span>
+    </div>` : ''}
+    <p class="text-xs text-gray-400 mt-3 italic text-right">Includes all posted contributions and journal entries${includeDrafts ? ' + unposted drafts shown separately' : ''}. Generated: ${new Date().toLocaleString('en-CA')}.</p>`;
 }
 
 async function genContribDistribution(from,to) {
