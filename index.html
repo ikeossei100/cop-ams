@@ -4545,11 +4545,14 @@ async function genNationalSummary(from, to) {
   const content = document.getElementById('report-content');
   content.innerHTML = '<div class="text-center text-gray-400 py-8">Loading national summary…</div>';
 
-  // Always fetch ALL data regardless of current user — this is a national report
-  const [jnlRes, conRes] = await Promise.all([
-    sb.from('journals').select('*').eq('status','posted').gte('date',from).lte('date',to),
-    sb.from('contributions').select('*').eq('status','posted').gte('date',from).lte('date',to)
-  ]);
+  // Fetch data — apply district filter if one is selected
+  let jnlQ = sb.from('journals').select('*').eq('status','posted').gte('date',from).lte('date',to);
+  let conQ = sb.from('contributions').select('*').eq('status','posted').gte('date',from).lte('date',to);
+  if (_rptUserFilter && _rptUserFilter !== 'all') {
+    jnlQ = reportJournalFilter(jnlQ);
+    conQ = reportContribFilter(conQ);
+  }
+  const [jnlRes, conRes] = await Promise.all([jnlQ, conQ]);
   const journals = jnlRes.data || [];
   const contribs = conRes.data || [];
 
@@ -4664,7 +4667,7 @@ async function genNationalSummary(from, to) {
       <div class="flex justify-between items-start flex-wrap gap-2">
         <div>
           <div class="font-display font-bold" style="font-size:1.2rem;color:#1a3c8f;letter-spacing:-0.02em;">Church of Pentecost Canada Inc</div>
-          <div class="font-bold text-gray-700 text-sm mt-0.5">National Offering Summary — All Districts Combined</div>
+          <div class="font-bold text-gray-700 text-sm mt-0.5">National Offering Summary — ${_rptUserFilter && _rptUserFilter !== 'all' ? _rptUserFilter : 'All Districts Combined'}</div>
         </div>
         <div class="flex flex-col items-end gap-2">
           <div class="text-right text-xs text-gray-400">
