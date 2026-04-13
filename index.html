@@ -2655,20 +2655,24 @@ async function executeBulkPost(ids) {
 
 function openContribForm(id) {
   const c = id ? contribData.find(x=>x.id===id) : null;
+  const districtSubOpts = coaCache
+    .filter(a => a.active!==false && a.parent_code==='4020')
+    .sort((a,b)=>(a.sort_order||0)-(b.sort_order||0))
+    .map(a=>`<option value="${a.code}" ${c?.account_code===a.code?'selected':''}>${a.code} – ${a.name}</option>`).join('');
+  // Determine if editing a contribution that uses a tithes district sub-code
+  const editingTithes = c && coaCache.some(a => a.parent_code==='4020' && a.code===c.account_code);
   const incomeOpts = (() => {
-    const c = parseInt;
-    let html = '<option value="4020">4020 – Tithes &amp; Offering</option>';
-    // Offerings (4089–4116)
+    const p = parseInt;
+    let html = `<option value="4020" ${(!c||editingTithes)?'selected':''}>4020 – Tithes &amp; Offering</option>`;
     html += coaCache
-      .filter(a => a.type==='Detail' && a.active!==false && c(a.code)>=4089 && c(a.code)<=4116)
+      .filter(a => a.type==='Detail' && a.active!==false && p(a.code)>=4089 && p(a.code)<=4116)
       .sort((a,b)=>(a.sort_order||0)-(b.sort_order||0))
-      .map(a=>`<option value="${a.code}">${a.code} – ${a.name}</option>`).join('');
-    // Mission Fund offerings (children of 4420)
+      .map(a=>`<option value="${a.code}" ${c?.account_code===a.code?'selected':''}>${a.code} – ${a.name}</option>`).join('');
     html += '<option disabled>──────────────</option>';
     html += coaCache
       .filter(a => a.type==='Detail' && a.active!==false && a.parent_code==='4420')
       .sort((a,b)=>(a.sort_order||0)-(b.sort_order||0))
-      .map(a=>`<option value="${a.code}">${a.code} – ${a.name}</option>`).join('');
+      .map(a=>`<option value="${a.code}" ${c?.account_code===a.code?'selected':''}>${a.code} – ${a.name}</option>`).join('');
     return html;
   })();
   const canPost = ['admin','accountant'].includes(currentProfile?.role);
@@ -2721,7 +2725,18 @@ function openContribForm(id) {
     </div>
     <input type="hidden" id="cf-date" value="${c?.date||today()}">
     <div><label class="form-label">Ref#</label><input id="cf-ref" class="form-input" value="${c?.ref_no||''}" placeholder="Ref number"></div>
-    <div><label class="form-label">Account *</label><select id="cf-acct" class="form-input"><option value="">— Select Account —</option>${incomeOpts}</select></div>
+    <div>
+      <label class="form-label">Account *</label>
+      <select id="cf-acct" class="form-input" onchange="toggleContribDistrictPicker()">
+        <option value="">— Select Account —</option>${incomeOpts}
+      </select>
+    </div>
+    <div id="cf-district-picker" style="display:${(!c||editingTithes)?'block':'none'};">
+      <label class="form-label">Tithes District *</label>
+      <select id="cf-district-acct" class="form-input">
+        <option value="">— Select District —</option>${districtSubOpts}
+      </select>
+    </div>
     <div>
       <label class="form-label">Received Into (Bank / Cash Account) *</label>
       <select id="cf-bank-acct" class="form-input">
@@ -2743,8 +2758,25 @@ function openContribForm(id) {
   `<button class="btn-secondary" onclick="closeModal()">Cancel</button>
    <button class="btn-secondary" onclick="saveContrib('${id||''}','draft')">Save Draft</button>
    ${canPost?`<button class="btn-primary" onclick="saveContrib('${id||''}','posted')">Save & Post</button>`:''}`);
-  if (c?.account_code) setTimeout(()=>{ const s=document.getElementById('cf-acct'); if(s) s.value=c.account_code; },50);
+  if (c?.account_code) setTimeout(()=>{
+    const s=document.getElementById('cf-acct');
+    const dp=document.getElementById('cf-district-acct');
+    const picker=document.getElementById('cf-district-picker');
+    if (editingTithes) {
+      if(s) s.value='4020';
+      if(dp) dp.value=c.account_code;
+      if(picker) picker.style.display='block';
+    } else {
+      if(s) s.value=c.account_code;
+    }
+  },50);
   setTimeout(syncContribDate, 30);
+}
+
+function toggleContribDistrictPicker() {
+  const acct = document.getElementById('cf-acct')?.value;
+  const picker = document.getElementById('cf-district-picker');
+  if (picker) picker.style.display = acct === '4020' ? 'block' : 'none';
 }
 
 function syncContribDate() {
@@ -2808,7 +2840,11 @@ function viewContribDetail(id) {
 
 async function saveContrib(id, status) {
   const date=document.getElementById('cf-date')?.value;
-  const account_code=document.getElementById('cf-acct')?.value;
+  const rawAcct=document.getElementById('cf-acct')?.value;
+  // If 4020 (Tithes & Offering) selected, use the district sub-account instead
+  const districtAcct = rawAcct==='4020' ? document.getElementById('cf-district-acct')?.value : '';
+  if (rawAcct==='4020' && !districtAcct) { toast('Please select a Tithes district.','error'); return; }
+  const account_code = districtAcct || rawAcct;
   const amount=parseFloat(document.getElementById('cf-amt')?.value);
   const bank_account_code=document.getElementById('cf-bank-acct')?.value || '1110';
   if (!date||!account_code||isNaN(amount)||amount<=0) { toast('Date, account, and positive amount required.','error'); return; }
@@ -3992,22 +4028,23 @@ function reportJournalFilter(q) {
 function reportUserFilter(q) { return reportContribFilter(q); }
 
 // Populate the district-filter dropdown in reports (admin only)
+// Reads from contributions.district so it matches exactly what is stored
 async function populateRptUserFilter() {
   const sel = document.getElementById('rpt-user-filter');
   if (!sel) return;
-  const { data } = await sb.from('profiles').select('district').eq('is_active', true);
   const prev = sel.value;
-  // Get unique districts sorted alphabetically, include "No District" for nulls
-  const rawDistricts = (data || []).map(u => u.district || '__none__');
-  const districts = [...new Set(rawDistricts)].sort((a,b) => a === '__none__' ? 1 : b === '__none__' ? -1 : a.localeCompare(b));
   sel.innerHTML = '<option value="all">All Districts (Combined)</option>';
-  districts.forEach(d => {
-    const opt = document.createElement('option');
-    opt.value = d;
-    opt.textContent = d === '__none__' ? 'No District Assigned' : d;
-    sel.appendChild(opt);
-  });
-  // Restore previous selection if still valid
+  try {
+    const { data } = await sb.from('contributions').select('district').eq('status', 'posted');
+    const rawDistricts = (data || []).map(r => r.district).filter(Boolean);
+    const districts = [...new Set(rawDistricts)].sort((a,b) => a.localeCompare(b));
+    districts.forEach(d => {
+      const opt = document.createElement('option');
+      opt.value = d;
+      opt.textContent = d;
+      sel.appendChild(opt);
+    });
+  } catch(e) { /* leave as All Districts only */ }
   if (prev && [...sel.options].some(o => o.value === prev)) sel.value = prev;
 }
 
@@ -4058,7 +4095,7 @@ async function generateReport() {
     ? (document.getElementById('rpt-user-filter')?.value || 'all')
     : 'all';
   // Pre-load user IDs for the selected district so journal filtering works
-  await loadRptDistrictUids(_rptUserFilter);
+  try { await loadRptDistrictUids(_rptUserFilter); } catch(e) { _rptDistrictUids = null; }
   document.getElementById('report-output').style.display='block';
   const content=document.getElementById('report-content');
   content.innerHTML='<div class="text-center text-gray-400 py-8">Generating report…</div>';
@@ -4545,61 +4582,83 @@ async function genNationalSummary(from, to) {
   const content = document.getElementById('report-content');
   content.innerHTML = '<div class="text-center text-gray-400 py-8">Loading national summary…</div>';
 
-  // Fetch data — apply district filter if one is selected
-  // When filtering by district: exclude IS-IMPORT/OB-IMPORT journals (they have no district)
-  // and use only contributions for that district
   const districtSelected = _rptUserFilter && _rptUserFilter !== 'all';
-  let jnlQ = sb.from('journals').select('*').eq('status','posted').gte('date',from).lte('date',to);
-  let conQ = sb.from('contributions').select('*').eq('status','posted').gte('date',from).lte('date',to);
-  if (districtSelected) {
-    // Exclude bulk import journals — they belong to all districts
-    jnlQ = jnlQ.not('ref_no', 'in', '("IS-IMPORT","OB-IMPORT")');
-    jnlQ = reportJournalFilter(jnlQ);
-    conQ = reportContribFilter(conQ);
-  }
-  const [jnlRes, conRes] = await Promise.all([jnlQ, conQ]);
+
+  if (!coaCache || coaCache.length === 0) await initCOACache();
+
+  // Fetch all posted contributions and journals
+  const [jnlRes, conRes] = await Promise.all([
+    sb.from('journals').select('*').eq('status','posted').gte('date',from).lte('date',to),
+    sb.from('contributions').select('*').eq('status','posted').gte('date',from).lte('date',to)
+  ]);
   const journals = jnlRes.data || [];
   const contribs = conRes.data || [];
 
-  // District accounts (children of 4020 only — not 4020 itself to avoid double counting)
-  const districtCodes = coaCache
+  // District sub-accounts (children of 4020)
+  const districtAccounts = coaCache
     .filter(a => a.parent_code === '4020' && a.active !== false)
     .sort((a,b) => (a.sort_order||0)-(b.sort_order||0));
 
-  // Tithes total: only district sub-accounts (children of 4020)
-  const tithesCodes = districtCodes.map(a => a.code);
+  // Map: lowercase district name → account {code, name}
+  const nameToAccount = {};
+  districtAccounts.forEach(a => { nameToAccount[a.name.trim().toLowerCase()] = a; });
+
+  const tithesAllCodes = new Set(['4020', ...districtAccounts.map(a => a.code)]);
 
   const CATEGORIES = [
-    { key:'tithes',   label:'Tithes & Offering',          codes: tithesCodes, perDistrict: true },
+    { key:'tithes',   label:'Tithes & Offering',          codes: [...tithesAllCodes], perDistrict: true },
     { key:'mission',  label:'Missionary Offering',         codes: ['4421'], perDistrict: false },
     { key:'mckeown',  label:"McKeown's Week Offering",     codes: ['4422'], perDistrict: false },
     { key:'easter',   label:'Easter Convention Offering',  codes: ['4102'], perDistrict: false },
     { key:'xmas',     label:'Christmas Convention Offering',codes: ['4105'], perDistrict: false },
   ];
 
-  // Build totals from journals + contributions
-  // IS-IMPORT posts income accounts as DB (special convention) — treat as positive
   const importRefs = new Set(['IS-IMPORT', 'OB-IMPORT']);
-  const accountTotals = {}; // code → amount (positive = income)
+  const accountTotals = {};
+
+  // Process journals
   journals.forEach(j => (j.lines||[]).forEach(l => {
     const amt = parseFloat(l.amount) || 0;
     const code = l.account_code || '';
     const isImport = importRefs.has(j.ref_no);
-    const isIncome = code.startsWith('4');
-    let contribution;
-    if (isImport && isIncome) {
-      // IS-IMPORT: income posted as DB — treat as positive income
-      contribution = l.dc === 'DB' ? amt : -amt;
-    } else {
-      // Normal journals: income is CR
-      contribution = l.dc === 'CR' ? amt : -amt;
-    }
-    accountTotals[code] = (accountTotals[code]||0) + contribution;
+    const val = (isImport && code.startsWith('4')) ? (l.dc==='DB'?amt:-amt) : (l.dc==='CR'?amt:-amt);
+    accountTotals[code] = (accountTotals[code]||0) + val;
   }));
+
+  // Process contributions — keyed by district sub-code
+  // If posted to a sub-code (4051, 4055 etc) → use that code
+  // If posted to parent 4020 → look up district name to find the right sub-code
+  const districtCodeTotals = {}; // sub-code → amount
+  let importedTotal = 0;
+
   contribs.forEach(c => {
     const amt = parseFloat(c.amount) || 0;
     accountTotals[c.account_code] = (accountTotals[c.account_code]||0) + amt;
+    if (!tithesAllCodes.has(c.account_code)) return;
+
+    if (c.account_code === '4020') {
+      // Posted to parent — attribute by district name
+      const distName = (c.district || '').trim().toLowerCase();
+      const acct = nameToAccount[distName];
+      const code = acct ? acct.code : '4020';
+      districtCodeTotals[code] = (districtCodeTotals[code]||0) + amt;
+    } else {
+      // Posted to specific district sub-code
+      districtCodeTotals[c.account_code] = (districtCodeTotals[c.account_code]||0) + amt;
+    }
   });
+
+  // IS-IMPORT tithes → imported bucket
+  journals.forEach(j => {
+    if (!importRefs.has(j.ref_no)) return;
+    (j.lines||[]).forEach(l => {
+      if (!tithesAllCodes.has(l.account_code)) return;
+      const amt = parseFloat(l.amount) || 0;
+      const val = l.dc === 'DB' ? amt : -amt;
+      if (val > 0) importedTotal += val;
+    });
+  });
+
 
   const fmt2 = n => '$' + Math.max(0,n).toLocaleString('en-CA',{minimumFractionDigits:2,maximumFractionDigits:2});
   const fmtDate = d => new Date(d+'T00:00:00').toLocaleDateString('en-CA',{year:'numeric',month:'long',day:'numeric'});
@@ -4609,20 +4668,41 @@ async function genNationalSummary(from, to) {
   const cacheCategories = [];
 
   CATEGORIES.forEach(cat => {
-    // For tithes: sum children + any direct 4020 postings (already de-duped in tithesCodes)
-    const catTotal = cat.codes.reduce((s,c) => s + Math.max(0, accountTotals[c]||0), 0);
+    // For tithes: sum from districtTotals (covers all entries regardless of which 4xxx code used)
+    // For other categories: sum accountTotals as usual
+    let catTotal;
+    if (cat.perDistrict) {
+      const subTotal = Object.values(districtCodeTotals).reduce((s,v) => s + Math.max(0,v), 0) + Math.max(0, importedTotal);
+      if (districtSelected) {
+        // Find the code for the selected district
+        const selAcct = districtAccounts.find(a => a.name === _rptUserFilter);
+        catTotal = selAcct ? Math.max(0, districtCodeTotals[selAcct.code] || 0) : 0;
+      } else {
+        catTotal = subTotal;
+      }
+    } else {
+      catTotal = cat.codes.reduce((s,c) => s + Math.max(0, accountTotals[c]||0), 0);
+    }
     grandTotal += catTotal;
 
     let rowsHtml = '';
     let cacheRows = [];
 
     if (cat.perDistrict) {
-      // Show each district sorted highest to lowest
-      // Only show district sub-accounts (children of 4020), not 4020 itself
-      const distRows = districtCodes
-        .map(a => ({ name: a.name, code: a.code, amt: Math.max(0, accountTotals[a.code]||0) }))
-        .filter(r => r.amt > 0)
-        .sort((a,b) => b.amt - a.amt);
+      // Build rows from district sub-accounts
+      let distRows = districtAccounts
+        .map(a => ({ code: a.code, name: a.name, amt: Math.max(0, districtCodeTotals[a.code]||0) }))
+        .filter(r => r.amt > 0);
+      // Also show any amount posted to 4020 that couldn't be matched to a sub-account
+      const unmatched = Math.max(0, districtCodeTotals['4020']||0);
+      if (unmatched > 0) distRows.push({ code:'4020', name:'Unclassified (posted to group)', amt: unmatched });
+      // Show imported total
+      if (!districtSelected && importedTotal > 0) distRows.push({ code:'', name:'Imported (All Districts)', amt: Math.max(0, importedTotal) });
+      if (districtSelected) {
+        const selAcct = districtAccounts.find(a => a.name === _rptUserFilter);
+        distRows = selAcct ? distRows.filter(r => r.code === selAcct.code) : [];
+      }
+      distRows.sort((a,b) => b.amt - a.amt);
 
       cacheRows = distRows;
       if (distRows.length === 0) {
@@ -7523,7 +7603,7 @@ async function loadUsers() {
   usersData=data||[];
   renderUsers();
   // Update sidebar pending badge
-  const pendingCount = (data||[]).filter(u => u.is_approved === false || u.is_approved === null).length;
+  const pendingCount = (data||[]).filter(u => !u.is_approved).length;
   const sideBadge = document.getElementById('sidebar-pending-badge');
   if (sideBadge) {
     sideBadge.textContent = pendingCount || '';
@@ -7533,7 +7613,7 @@ async function loadUsers() {
 
 function renderUsers() {
   // Treat NULL and false both as pending (handles cases where column default varies)
-  const pending  = usersData.filter(u => u.is_approved === false || u.is_approved === null);
+  const pending  = usersData.filter(u => !u.is_approved);
   const approved = usersData.filter(u => u.is_approved === true);
 
   // ── Pending approvals section ──
