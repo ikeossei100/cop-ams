@@ -4546,9 +4546,14 @@ async function genNationalSummary(from, to) {
   content.innerHTML = '<div class="text-center text-gray-400 py-8">Loading national summary…</div>';
 
   // Fetch data — apply district filter if one is selected
+  // When filtering by district: exclude IS-IMPORT/OB-IMPORT journals (they have no district)
+  // and use only contributions for that district
+  const districtSelected = _rptUserFilter && _rptUserFilter !== 'all';
   let jnlQ = sb.from('journals').select('*').eq('status','posted').gte('date',from).lte('date',to);
   let conQ = sb.from('contributions').select('*').eq('status','posted').gte('date',from).lte('date',to);
-  if (_rptUserFilter && _rptUserFilter !== 'all') {
+  if (districtSelected) {
+    // Exclude bulk import journals — they belong to all districts
+    jnlQ = jnlQ.not('ref_no', 'in', '("IS-IMPORT","OB-IMPORT")');
     jnlQ = reportJournalFilter(jnlQ);
     conQ = reportContribFilter(conQ);
   }
