@@ -4029,14 +4029,14 @@ function reportJournalFilter(q) {
 function reportUserFilter(q) { return reportContribFilter(q); }
 
 // Populate the district-filter dropdown in reports (admin only)
-// Reads from contributions.district so it matches exactly what is stored
+// Reads from approved profiles so all districts show even with no contributions yet
 async function populateRptUserFilter() {
   const sel = document.getElementById('rpt-user-filter');
   if (!sel) return;
   const prev = sel.value;
   sel.innerHTML = '<option value="all">All Districts (Combined)</option>';
   try {
-    const { data } = await sb.from('contributions').select('district').eq('status', 'posted');
+    const { data } = await sb.from('profiles').select('district').eq('is_approved', true).eq('is_active', true);
     const rawDistricts = (data || []).map(r => r.district).filter(Boolean);
     const districts = [...new Set(rawDistricts)].sort((a,b) => a.localeCompare(b));
     districts.forEach(d => {
