@@ -3959,34 +3959,37 @@ async function loadRptDistrictUids(district) {
   _rptDistrictUids = (data || []).map(u => u.id);
 }
 
-// Returns the right filter for report queries — handles both contributions (district column) and journals (entered_by).
-function reportUserFilter(q) {
+// Filter for contributions table (has district column)
+function reportContribFilter(q) {
   const role = currentProfile?.role;
-  const uid  = myId();
-  const tableName = q._url ? (q._url.toString().includes('/contributions') ? 'contributions' : 'journals') : '';
-
+  const uid = myId();
   if (role === 'admin' && _rptUserFilter && _rptUserFilter !== 'all') {
-    const district = _rptUserFilter;
-    if (district === '__none__') {
-      // Contributions: filter by null district; journals: filter by users with no district
-      if (_rptDistrictUids !== null && _rptDistrictUids.length === 0) return q.is('entered_by', null);
-      return q.is('district', null);
-    }
-    // For contributions — filter directly by district column
-    // For journals — filter by entered_by (users in that district)
-    if (_rptDistrictUids && _rptDistrictUids.length > 0) {
-      // Try district column first (contributions), fall back to entered_by (journals)
-      return q.or(`district.eq.${district},entered_by.in.(${_rptDistrictUids.join(',')})`);
-    }
-    return q.eq('district', district);
+    if (_rptUserFilter === '__none__') return q.is('district', null);
+    return q.eq('district', _rptUserFilter);
   }
-  // Admin with "all" → no filter
   if (role === 'admin') return q;
-  // Non-admin: restrict to own district
   if (_districtUids && _districtUids.length > 0) return q.in('entered_by', _districtUids);
   if (uid) return q.eq('entered_by', uid);
   return q;
 }
+
+// Filter for journals table (no district column — filter by entered_by)
+function reportJournalFilter(q) {
+  const role = currentProfile?.role;
+  const uid = myId();
+  if (role === 'admin' && _rptUserFilter && _rptUserFilter !== 'all') {
+    if (_rptDistrictUids && _rptDistrictUids.length > 0) return q.in('entered_by', _rptDistrictUids);
+    if (_rptDistrictUids && _rptDistrictUids.length === 0) return q.eq('entered_by', 'no-match');
+    return q;
+  }
+  if (role === 'admin') return q;
+  if (_districtUids && _districtUids.length > 0) return q.in('entered_by', _districtUids);
+  if (uid) return q.eq('entered_by', uid);
+  return q;
+}
+
+// Legacy alias — defaults to contribution filter for backward compatibility
+function reportUserFilter(q) { return reportContribFilter(q); }
 
 // Populate the district-filter dropdown in reports (admin only)
 async function populateRptUserFilter() {
@@ -4074,13 +4077,13 @@ async function generateReport() {
 
 async function getPostedJournals(from,to) {
   let q = sb.from('journals').select('*').eq('status','posted').gte('date',from).lte('date',to);
-  q = reportUserFilter(q);
+  q = reportJournalFilter(q);
   const {data}=await q;
   return data||[];
 }
 async function getPostedContribs(from,to) {
   let q = sb.from('contributions').select('*').eq('status','posted').gte('date',from).lte('date',to);
-  q = reportUserFilter(q);
+  q = reportContribFilter(q);
   const {data}=await q;
   return data||[];
 }
@@ -4700,7 +4703,7 @@ async function genNationalSummary(from, to) {
 }
 
 async function genContribDistribution(from,to) {
-  const {data,error}=await reportUserFilter(sb.from('contributions').select('*').eq('status','posted').gte('date',from).lte('date',to).order('date',{ascending:true}));
+  const {data,error}=await reportContribFilter(sb.from('contributions').select('*').eq('status','posted').gte('date',from).lte('date',to).order('date',{ascending:true}));
   if(error){toast('Error: '+error.message,'error');return;}
   const list=data||[];
   const rows=list.map(c=>{
