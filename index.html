@@ -4527,14 +4527,14 @@ async function genNationalSummary(from, to) {
   const journals = jnlRes.data || [];
   const contribs = conRes.data || [];
 
-  // District accounts (4051–4088): Tithes & Offering per district
+  // District accounts (children of 4020) + 4020 itself
   const districtCodes = coaCache
-    .filter(a => a.parent_code === '4020' && a.type === 'Detail' && a.active !== false)
+    .filter(a => (a.parent_code === '4020' || a.code === '4020') && a.active !== false)
     .sort((a,b) => (a.sort_order||0)-(b.sort_order||0));
 
-  // The 5 summary categories
+  // The 5 summary categories — include 4020 group code directly in tithes
   const CATEGORIES = [
-    { key:'tithes',   label:'Tithes & Offering',          codes: districtCodes.map(a=>a.code), perDistrict: true },
+    { key:'tithes',   label:'Tithes & Offering',          codes: ['4020', ...districtCodes.map(a=>a.code)], perDistrict: true },
     { key:'mission',  label:'Missionary Offering',         codes: ['4421'], perDistrict: false },
     { key:'mckeown',  label:"McKeown's Week Offering",     codes: ['4422'], perDistrict: false },
     { key:'easter',   label:'Easter Convention Offering',  codes: ['4102'], perDistrict: false },
