@@ -1611,12 +1611,11 @@ async function authRegister() {
       // 2. Create profile row — is_approved: false until admin approves
       // is_approved defaults to false — run the Supabase SQL migration first:
       // ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS is_approved BOOLEAN DEFAULT FALSE;
-      const profileData = { id: uid, full_name: name, role, district: district||null, is_active: true, failed_attempts: 0 };
-      try { Object.assign(profileData, { is_approved: false }); } catch(e) {}
+      const profileData = { id: uid, full_name: name, role, district: district||null, is_active: true, is_approved: true, failed_attempts: 0 };
       await sb.from('profiles').upsert(profileData, { onConflict: 'id' });
     }
 
-    okEl.textContent = 'Account created! Your account is pending approval by an administrator. You will be notified when access is granted.';
+    okEl.textContent = 'Account created successfully! You can now sign in with your email and password.';
     okEl.classList.remove('hidden');
     // Clear fields
     ['reg-name','reg-email','reg-password','reg-confirm','reg-district'].forEach(id => {
