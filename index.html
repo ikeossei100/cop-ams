@@ -4790,6 +4790,210 @@ async function exportNationalExcel() {
   a.click();
 }
 
+// ── District Breakdown Excel Export ──────────────────────────────────────
+// Opens a modal to pick one offering type + date range, then exports
+// a spreadsheet: rows = districts, columns = months, values = totals.
+
+function openDistrictBreakdownExport() {
+  const from = document.getElementById('rpt-from').value;
+  const to   = document.getElementById('rpt-to').value;
+  openModal('Export District Breakdown to Excel',
+    `<div class="space-y-4">
+      <p class="text-sm text-gray-600">Choose one offering category and a date range. The Excel file will show each district as a row and each month as a column.</p>
+      <div>
+        <label class="form-label">Offering Category *</label>
+        <select id="dbe-category" class="form-input">
+          <option value="tithes">Tithes &amp; Offering</option>
+          <option value="mission">Missionary Offering</option>
+          <option value="mckeown">McKeown's Week Offering</option>
+          <option value="easter">Easter Convention Offering</option>
+          <option value="xmas">Christmas Convention Offering</option>
+        </select>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="form-label">From Date *</label>
+          <input type="date" id="dbe-from" class="form-input" value="${from}">
+        </div>
+        <div>
+          <label class="form-label">To Date *</label>
+          <input type="date" id="dbe-to" class="form-input" value="${to}">
+        </div>
+      </div>
+      <div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:8px;padding:10px 14px;">
+        <p class="text-xs text-green-700 font-semibold">What you get:</p>
+        <p class="text-xs text-green-600 mt-1">One Excel sheet — districts as rows, months as columns, grand totals on the right and bottom. Ready to paste into Power BI or analyse directly.</p>
+      </div>
+    </div>`,
+    `<button class="btn-secondary" onclick="closeModal()">Cancel</button>
+     <button class="btn-primary" style="background:#16a34a;" onclick="runDistrictBreakdownExport()">⬇ Download Excel</button>`
+  );
+}
+
+async function runDistrictBreakdownExport() {
+  const catKey  = document.getElementById('dbe-category')?.value;
+  const from    = document.getElementById('dbe-from')?.value;
+  const to      = document.getElementById('dbe-to')?.value;
+  if (!from || !to) { toast('Select a date range.', 'error'); return; }
+  if (typeof ExcelJS === 'undefined') { toast('ExcelJS not loaded yet.', 'error'); return; }
+  if (!coaCache || coaCache.length === 0) await initCOACache();
+
+  const CATS = {
+    tithes:  { label: 'Tithes & Offering',           codes: null },  // special — uses district sub-accounts
+    mission: { label: 'Missionary Offering',          codes: ['4421'] },
+    mckeown: { label: "McKeown's Week Offering",      codes: ['4422'] },
+    easter:  { label: 'Easter Convention Offering',   codes: ['4102'] },
+    xmas:    { label: 'Christmas Convention Offering', codes: ['4105'] },
+  };
+  const cat = CATS[catKey];
+
+  // Fetch all posted contributions in range
+  const { data, error } = await sb.from('contributions')
+    .select('date,amount,account_code,district')
+    .eq('status','posted')
+    .gte('date', from)
+    .lte('date', to);
+  if (error) { toast('Error: ' + error.message, 'error'); return; }
+  const rows = data || [];
+
+  // Build list of months in range
+  const months = [];
+  let cur = new Date(from.slice(0,7) + '-01');
+  const end = new Date(to.slice(0,7) + '-01');
+  while (cur <= end) {
+    months.push(cur.toISOString().slice(0,7)); // YYYY-MM
+    cur = new Date(cur.getFullYear(), cur.getMonth()+1, 1);
+  }
+
+  // District sub-accounts for tithes
+  const districtAccounts = coaCache.filter(a => a.parent_code === '4020' && a.active !== false);
+  const tithesAllCodes = new Set(['4020', ...districtAccounts.map(a => a.code)]);
+  const nameToAccount = {};
+  districtAccounts.forEach(a => { nameToAccount[a.name.trim().toLowerCase()] = a; });
+
+  // Filter rows to this category
+  const relevant = rows.filter(c => {
+    if (catKey === 'tithes') return tithesAllCodes.has(c.account_code);
+    return cat.codes.includes(c.account_code);
+  });
+
+  // Get all districts
+  const { data: profData } = await sb.from('profiles').select('district').eq('is_approved', true).eq('is_active', true);
+  const allDistricts = [...new Set([
+    ...(profData||[]).map(r=>r.district).filter(Boolean),
+    ...relevant.map(r=>r.district).filter(Boolean)
+  ])].sort();
+
+  // Build pivot: district → month → total
+  // { district: { 'YYYY-MM': total } }
+  const pivot = {};
+  allDistricts.forEach(d => { pivot[d] = {}; months.forEach(m => { pivot[d][m] = 0; }); });
+
+  relevant.forEach(c => {
+    const amt = parseFloat(c.amount) || 0;
+    const month = c.date.slice(0,7);
+    let district = (c.district || '').trim();
+
+    // For tithes: resolve district from account code if district field blank
+    if (catKey === 'tithes' && !district && c.account_code !== '4020') {
+      const acct = districtAccounts.find(a => a.code === c.account_code);
+      if (acct) district = acct.name;
+    }
+    if (!district) district = 'Unclassified';
+    if (!pivot[district]) { pivot[district] = {}; months.forEach(m => { pivot[district][m] = 0; }); }
+    if (pivot[district][month] !== undefined) pivot[district][month] += amt;
+  });
+
+  // ── Build Excel ──
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'COP AMS';
+  const ws = wb.addWorksheet(cat.label.slice(0,31));
+
+  const fmtMonth = m => { const d = new Date(m+'-01'); return d.toLocaleString('en-CA',{month:'short',year:'numeric'}); };
+
+  // Title rows
+  ws.mergeCells(1, 1, 1, months.length + 3);
+  ws.getCell('A1').value = 'Church of Pentecost Canada Inc';
+  ws.getCell('A1').font = { bold:true, size:14, color:{argb:'FF1A3C8F'} };
+  ws.mergeCells(2, 1, 2, months.length + 3);
+  ws.getCell('A2').value = `${cat.label} — District Monthly Breakdown`;
+  ws.getCell('A2').font = { bold:true, size:11 };
+  ws.mergeCells(3, 1, 3, months.length + 3);
+  ws.getCell('A3').value = `Period: ${from} to ${to}   |   Generated: ${new Date().toLocaleDateString('en-CA')}`;
+  ws.getCell('A3').font = { size:9, color:{argb:'FF64748B'} };
+
+  // Header row
+  const headerRow = ws.getRow(5);
+  headerRow.getCell(1).value = 'District';
+  months.forEach((m, i) => { headerRow.getCell(i+2).value = fmtMonth(m); });
+  headerRow.getCell(months.length+2).value = 'TOTAL';
+  headerRow.eachCell(cell => {
+    cell.font = { bold:true, color:{argb:'FFFFFFFF'} };
+    cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FF1A3C8F'} };
+    cell.alignment = { horizontal:'center' };
+    cell.border = { bottom:{style:'medium',color:{argb:'FF0284C7'}} };
+  });
+  ws.getColumn(1).width = 28;
+  months.forEach((_,i) => { ws.getColumn(i+2).width = 14; });
+  ws.getColumn(months.length+2).width = 16;
+
+  // District rows
+  const districtList = Object.keys(pivot).sort();
+  const colTotals = {}; months.forEach(m => { colTotals[m] = 0; });
+  let grandTotal = 0;
+
+  districtList.forEach((district, di) => {
+    const row = ws.getRow(di + 6);
+    row.getCell(1).value = district;
+    row.getCell(1).font = { bold: false };
+    let rowTotal = 0;
+    months.forEach((m, mi) => {
+      const amt = pivot[district][m] || 0;
+      row.getCell(mi+2).value = amt > 0 ? amt : null;
+      if (amt > 0) {
+        row.getCell(mi+2).numFmt = '#,##0.00';
+        row.getCell(mi+2).alignment = { horizontal:'right' };
+      }
+      rowTotal += amt;
+      colTotals[m] += amt;
+    });
+    grandTotal += rowTotal;
+    row.getCell(months.length+2).value = rowTotal;
+    row.getCell(months.length+2).numFmt = '#,##0.00';
+    row.getCell(months.length+2).font = { bold:true };
+    row.getCell(months.length+2).alignment = { horizontal:'right' };
+    if (di % 2 === 1) {
+      row.eachCell(cell => { cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FFF8FAFF'} }; });
+    }
+  });
+
+  // Totals row
+  const totRow = ws.getRow(districtList.length + 6);
+  totRow.getCell(1).value = 'GRAND TOTAL';
+  months.forEach((m, mi) => {
+    totRow.getCell(mi+2).value = colTotals[m] || null;
+    if (colTotals[m] > 0) { totRow.getCell(mi+2).numFmt = '#,##0.00'; totRow.getCell(mi+2).alignment = { horizontal:'right' }; }
+  });
+  totRow.getCell(months.length+2).value = grandTotal;
+  totRow.getCell(months.length+2).numFmt = '#,##0.00';
+  totRow.eachCell(cell => {
+    cell.font = { bold:true, color:{argb:'FFFFFFFF'} };
+    cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FF1A3C8F'} };
+    cell.alignment = { horizontal: cell.col === 1 ? 'left' : 'right' };
+  });
+
+  ws.views = [{ state:'frozen', ySplit:5, xSplit:1 }];
+
+  const buf = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buf], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `COP_${catKey}_Districts_${from}_${to}.xlsx`;
+  a.click();
+  closeModal();
+  toast(`Downloaded: ${cat.label} breakdown for all districts.`, 'success');
+}
+
 async function genNationalSummary(from, to) {
   const content = document.getElementById('report-content');
   content.innerHTML = '<div class="text-center text-gray-400 py-8">Loading national summary…</div>';
@@ -5068,6 +5272,7 @@ async function genNationalSummary(from, to) {
             <button class="btn-secondary text-xs" onclick="window.print()">🖨 Print</button>
             <button class="btn-danger text-xs" onclick="exportNationalPDF()">⬇ Export PDF</button>
             <button class="btn-gold text-xs" onclick="exportNationalExcel()">⬇ Export Excel</button>
+            <button class="btn-primary text-xs" style="background:#16a34a;" onclick="openDistrictBreakdownExport()">⬇ District Breakdown Excel</button>
           </div>
         </div>
       </div>
