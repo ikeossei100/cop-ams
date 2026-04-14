@@ -978,6 +978,7 @@ tailwind.config = {
       <button class="btn-secondary text-xs" onclick="printReport()">Print</button>
       <button class="btn-gold text-xs" onclick="exportReportPDF()">Export PDF</button>
       <button class="btn-secondary text-xs" onclick="exportReportCSV()">Export CSV</button>
+      <button id="btn-print-all-districts" class="btn-primary text-xs" style="display:none;background:#1a3c8f;" onclick="printAllDistrictsReport()">⬇ All Districts PDF</button>
       <button id="btn-print-all-stmts" class="btn-primary text-xs" style="display:none;background:#1a1a2e;" onclick="openAllStatementsSelector()">Print All Statements</button>
     </div>
   </div>
@@ -4153,6 +4154,11 @@ function runReport(type) {
       userWrapper.style.display = 'none';
     }
   }
+  // Show "All Districts PDF" button only for IS and BS (admin only)
+  const allDistBtn = document.getElementById('btn-print-all-districts');
+  if (allDistBtn) {
+    allDistBtn.style.display = (currentProfile?.role === 'admin' && ['income-statement','balance-sheet'].includes(type)) ? 'inline-block' : 'none';
+  }
 }
 
 async function generateReport() {
@@ -4179,6 +4185,142 @@ async function generateReport() {
     else if(activeReport==='journal-report') await genJournalReport(from,to);
     else if(activeReport==='national-summary') await genNationalSummary(from,to);
   } catch(e){ content.innerHTML=`<p class="text-red-600">Error: ${e.message}</p>`; }
+}
+
+// ── Print Income Statement or Balance Sheet for every district ──
+async function printAllDistrictsReport() {
+  const from = document.getElementById('rpt-from').value;
+  const to   = document.getElementById('rpt-to').value;
+  if (!from || !to) { toast('Select a date range first.', 'error'); return; }
+  if (!['income-statement','balance-sheet'].includes(activeReport)) {
+    toast('Switch to Income Statement or Balance Sheet first.', 'error'); return;
+  }
+
+  if (typeof window.jspdf === 'undefined') { toast('jsPDF not loaded yet.', 'error'); return; }
+  if (!coaCache || coaCache.length === 0) await initCOACache();
+
+  // Fetch all districts from profiles
+  const { data: profData } = await sb.from('profiles').select('district').eq('is_approved', true).eq('is_active', true);
+  const districts = [...new Set((profData||[]).map(r=>r.district).filter(Boolean))].sort();
+  if (!districts.length) { toast('No districts found.', 'error'); return; }
+
+  toast(`Generating ${activeReport === 'income-statement' ? 'Income Statements' : 'Balance Sheets'} for ${districts.length} district(s)…`, 'success');
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const fmt2 = n => '$' + n.toLocaleString('en-CA', { minimumFractionDigits:2, maximumFractionDigits:2 });
+  const fmtDate = d => new Date(d+'T00:00:00').toLocaleDateString('en-CA',{year:'numeric',month:'short',day:'numeric'});
+  const pageW = 210;
+  let isFirstPage = true;
+
+  for (const district of districts) {
+    // Set district filter
+    _rptUserFilter = district;
+    try { await loadRptDistrictUids(district); } catch(e) { _rptDistrictUids = null; }
+
+    if (!isFirstPage) doc.addPage();
+    isFirstPage = false;
+
+    // ── Header ──
+    doc.setFillColor(26, 60, 143);
+    doc.rect(0, 0, pageW, 22, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(14);
+    doc.text('Church of Pentecost Canada Inc', 14, 10);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
+    doc.text(activeReport === 'income-statement' ? 'Income & Expense Statement' : 'Balance Sheet', 14, 17);
+    doc.setFontSize(9); doc.setTextColor(180, 200, 255);
+    doc.text(`District: ${district}`, pageW - 14, 10, { align: 'right' });
+    doc.text(`Period: ${fmtDate(from)} — ${fmtDate(to)}`, pageW - 14, 17, { align: 'right' });
+    doc.setFontSize(8); doc.setTextColor(150, 150, 150);
+    doc.text(`Printed: ${new Date().toLocaleString('en-CA')}`, pageW - 14, 26, { align: 'right' });
+
+    let y = 32;
+
+    if (activeReport === 'income-statement') {
+      const ytdFrom = from.slice(0,4) + '-01-01';
+      const [jnlP, conP, jnlY, conY] = await Promise.all([
+        getPostedJournals(from, to),
+        getPostedContribs(from, to),
+        getPostedJournals(ytdFrom, to),
+        getPostedContribs(ytdFrom, to),
+      ]);
+      const balP = buildAccountBalances(jnlP, conP);
+      const balY = buildAccountBalances(jnlY, conY);
+      const allCodes = [...new Set([...Object.keys(balP),...Object.keys(balY)])]
+        .filter(c => { const n=parseInt(c)||0; return (n>=4000&&n<=4999)||(n>=5000&&n<=5999); })
+        .sort((a,b)=>(parseInt(a)||0)-(parseInt(b)||0));
+
+      let totInP=0, totExpP=0, totInY=0, totExpY=0;
+      const incRows=[], expRows=[];
+      allCodes.forEach(code => {
+        const n = parseInt(code)||0;
+        const bp = balP[code]||{debit:0,credit:0};
+        const by = balY[code]||{debit:0,credit:0};
+        const netP = Math.max(bp.debit, bp.credit);
+        const netY = Math.max(by.debit, by.credit);
+        if (netP < 0.005 && netY < 0.005) return;
+        const name = coaCache.find(a=>a.code===code)?.name || code;
+        const row = [code, name, netP>=0.005?fmt2(netP):'—', netY>=0.005?fmt2(netY):'—'];
+        if (n>=4000&&n<=4999) { totInP+=netP; totInY+=netY; incRows.push(row); }
+        if (n>=5000&&n<=5999) { totExpP+=netP; totExpY+=netY; expRows.push(row); }
+      });
+      const netP = totInP - totExpP;
+      const netY = totInY - totExpY;
+
+      const head = [['Code','Account',`Period (${fmtDate(from)})`,`YTD (${fmtDate(ytdFrom)})`]];
+      const body = [];
+      body.push([{content:'INCOME',colSpan:4,styles:{fillColor:[220,229,247],textColor:[26,60,143],fontStyle:'bold',fontSize:9}}]);
+      incRows.forEach(r => body.push(r));
+      body.push([{content:'Total Income',colSpan:2,styles:{fillColor:[232,237,247],fontStyle:'bold',textColor:[26,60,143],fontSize:9}},{content:fmt2(totInP),styles:{fillColor:[232,237,247],fontStyle:'bold',textColor:[26,60,143],halign:'right',fontSize:9}},{content:fmt2(totInY),styles:{fillColor:[220,229,247],fontStyle:'bold',textColor:[26,60,143],halign:'right',fontSize:9}}]);
+      body.push([{content:'EXPENDITURE',colSpan:4,styles:{fillColor:[220,229,247],textColor:[26,60,143],fontStyle:'bold',fontSize:9}}]);
+      expRows.forEach(r => body.push(r));
+      body.push([{content:'Total Expenditure',colSpan:2,styles:{fillColor:[232,237,247],fontStyle:'bold',textColor:[26,60,143],fontSize:9}},{content:fmt2(totExpP),styles:{fillColor:[232,237,247],fontStyle:'bold',textColor:[26,60,143],halign:'right',fontSize:9}},{content:fmt2(totExpY),styles:{fillColor:[220,229,247],fontStyle:'bold',textColor:[26,60,143],halign:'right',fontSize:9}}]);
+      body.push([{content:'NET SURPLUS / (DEFICIT)',colSpan:2,styles:{fillColor:[26,60,143],textColor:[255,255,255],fontStyle:'bold',fontSize:10,cellPadding:4}},{content:netP<0?'('+fmt2(Math.abs(netP))+')':fmt2(netP),styles:{fillColor:[26,60,143],textColor:netP>=0?[187,247,208]:[252,165,165],fontStyle:'bold',fontSize:10,halign:'right',cellPadding:4}},{content:netY<0?'('+fmt2(Math.abs(netY))+')':fmt2(netY),styles:{fillColor:[21,47,114],textColor:netY>=0?[187,247,208]:[252,165,165],fontStyle:'bold',fontSize:10,halign:'right',cellPadding:4}}]);
+
+      doc.autoTable({ head, body, startY: y, margin:{left:14,right:14}, styles:{fontSize:8,cellPadding:2}, headStyles:{fillColor:[26,60,143],textColor:[255,255,255],fontStyle:'bold'}, columnStyles:{0:{cellWidth:18},2:{halign:'right',cellWidth:35},3:{halign:'right',cellWidth:35}} });
+
+    } else {
+      // Balance Sheet
+      const [allJnl, allCon] = await Promise.all([
+        getPostedJournals('2000-01-01', to),
+        getPostedContribs('2000-01-01', to)
+      ]);
+      const bal = buildAccountBalances(allJnl, allCon);
+      const sections = [
+        { label:'ASSETS',      range:[1000,1999], dc:'DB' },
+        { label:'LIABILITIES', range:[2000,2999], dc:'CR' },
+        { label:'FUND BALANCE',range:[3000,3999], dc:'CR' },
+      ];
+      const body = [];
+      sections.forEach(sec => {
+        body.push([{content:sec.label,colSpan:3,styles:{fillColor:[220,229,247],textColor:[26,60,143],fontStyle:'bold',fontSize:9}}]);
+        let secTotal = 0;
+        Object.keys(bal).sort((a,b)=>(parseInt(a)||0)-(parseInt(b)||0)).forEach(code => {
+          const n = parseInt(code)||0;
+          if (n<sec.range[0]||n>sec.range[1]) return;
+          const b = bal[code];
+          const net = sec.dc==='DB' ? b.debit-b.credit : b.credit-b.debit;
+          if (Math.abs(net)<0.005) return;
+          const name = coaCache.find(a=>a.code===code)?.name||code;
+          secTotal += net;
+          body.push([code, name, fmt2(Math.max(0,net))]);
+        });
+        body.push([{content:`Total ${sec.label}`,colSpan:2,styles:{fillColor:[232,237,247],fontStyle:'bold',textColor:[26,60,143],fontSize:9}},{content:fmt2(Math.max(0,secTotal)),styles:{fillColor:[232,237,247],fontStyle:'bold',textColor:[26,60,143],halign:'right',fontSize:9}}]);
+      });
+
+      doc.autoTable({ head:[['Code','Account','Amount (CAD)']], body, startY: y, margin:{left:14,right:14}, styles:{fontSize:8,cellPadding:2}, headStyles:{fillColor:[26,60,143],textColor:[255,255,255],fontStyle:'bold'}, columnStyles:{0:{cellWidth:18},2:{halign:'right',cellWidth:40}} });
+    }
+  }
+
+  // Reset district filter back to all
+  _rptUserFilter = 'all';
+  _rptDistrictUids = null;
+  document.getElementById('rpt-user-filter').value = 'all';
+
+  const label = activeReport === 'income-statement' ? 'IncomeStatement' : 'BalanceSheet';
+  doc.save(`AllDistricts_${label}_${from}_${to}.pdf`);
+  toast('PDF downloaded — one page per district.', 'success');
 }
 
 async function getPostedJournals(from,to) {
