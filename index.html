@@ -4490,6 +4490,7 @@ async function genBalanceSheet(from,to) {
 
 // ── National Offering Summary ─────────────────────────────────────────────
 let _nationalCache = null; // stored for PDF/Excel export
+let _stmtContributorName = ''; // contributor name for PDF header
 
 async function exportNationalPDF() {
   if (!_nationalCache) { toast('Generate the report first.', 'error'); return; }
@@ -5049,6 +5050,7 @@ async function genContributorStatement(from,to) {
   const list=data||[];
   // Grab contact details from first record
   const first=list[0]||{};
+  _stmtContributorName = first.contributor_name || name || envNo || phone || '';
   const grandTotal=list.reduce((s,c)=>s+(parseFloat(c.amount)||0),0);
   const rows=list.map((c,i)=>{
     const a=coaCache.find(x=>x.code===c.account_code);
@@ -5762,7 +5764,10 @@ function exportReportPDF() {
     'contributor-statement': 'Contributor Statement',
     'journal-report': 'Journal Report',
   };
-  const title = reportTitleMap[activeReport] || document.querySelector('#report-content h2')?.textContent || 'Report';
+  const baseTitle = reportTitleMap[activeReport] || document.querySelector('#report-content h2')?.textContent || 'Report';
+  const title = (activeReport === 'contributor-statement' && _stmtContributorName)
+    ? `Contributor Statement — ${_stmtContributorName}`
+    : baseTitle;
   const from=document.getElementById('rpt-from').value;
   const to=document.getElementById('rpt-to').value;
   if(typeof window.jspdf==='undefined'){toast('jsPDF not loaded.','error');return;}
