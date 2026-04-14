@@ -191,6 +191,23 @@ tailwind.config = {
   #modal-box {
     border-radius:16px;
     box-shadow: 0 20px 60px rgba(0,0,0,0.2), 0 4px 16px rgba(0,0,0,0.1);
+    display:flex;
+    flex-direction:column;
+    max-height:92vh;
+    width:100%;
+    max-width:56rem;
+  }
+  #modal-box .px-5.py-4#modal-body {
+    overflow-y:auto;
+    flex:1;
+    min-height:0;
+  }
+  @media (max-width:640px) {
+    #modal-box { max-height:98vh; border-radius:12px; }
+    #modal-overlay { padding:4px; align-items:flex-end; }
+  }
+  @media (min-width:641px) and (max-width:1024px) {
+    #modal-box { max-height:94vh; max-width:44rem; }
   }
 </style>
 </head>
@@ -1385,15 +1402,15 @@ Login at: </textarea>
 
 <!-- ═══════════════ MODAL OVERLAY ═══════════════ -->
 <div id="modal-overlay" class="modal-hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-  <div id="modal-box" class="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-screen overflow-y-auto">
-    <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+  <div id="modal-box" class="bg-white rounded-xl shadow-2xl">
+    <div class="flex items-center justify-between px-5 py-3 border-b border-gray-100 flex-shrink-0">
       <h3 class="font-semibold text-gray-800 text-sm" id="modal-title">Modal</h3>
       <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12"/></svg>
       </button>
     </div>
-    <div class="px-5 py-4" id="modal-body"></div>
-    <div class="flex justify-end gap-2 px-5 py-4 border-t border-gray-100" id="modal-footer"></div>
+    <div class="px-5 py-4" id="modal-body" style="overflow-y:auto;flex:1;min-height:0;"></div>
+    <div class="flex justify-end gap-2 px-5 py-3 border-t border-gray-100 flex-shrink-0" id="modal-footer"></div>
   </div>
 </div>
 
@@ -3485,32 +3502,32 @@ function openJournalForm(id) {
     const yr=new Date().getFullYear()-2+i;
     return `<option value="${yr}" ${yr===_jyr?'selected':''}>${yr}</option>`;
   }).join('');
-  openModal(j?'Edit Journal Entry':'New Journal Entry',`<div class="space-y-3">
+  openModal(j?'Edit Journal Entry':'New Journal Entry',`<div class="space-y-2">
     <div class="grid grid-cols-2 gap-2">
       <div>
-        <label class="form-label">Working Period (Month &amp; Day) *</label>
-        <div class="flex gap-2">
-          <select id="jf-month" class="form-input flex-1" onchange="syncJournalDate()">${_monthOpts}</select>
-          <select id="jf-day" class="form-input w-20" onchange="syncJournalDate()">${_dayOpts}</select>
-          <select id="jf-year" class="form-input w-24" onchange="syncJournalDate()">${_yearOpts}</select>
+        <label class="form-label" style="margin-bottom:3px;">Date *</label>
+        <div class="flex gap-1">
+          <select id="jf-month" class="form-input flex-1 text-xs" onchange="syncJournalDate()">${_monthOpts}</select>
+          <select id="jf-day" class="form-input w-16 text-xs" onchange="syncJournalDate()">${_dayOpts}</select>
+          <select id="jf-year" class="form-input w-20 text-xs" onchange="syncJournalDate()">${_yearOpts}</select>
         </div>
         <input type="hidden" id="jf-date" value="${_jd}">
       </div>
       <div class="flex gap-2">
-        <div class="flex-1"><label class="form-label">Type</label><select id="jf-type" class="form-input">${['JE','CR','CD','AP','AR','BR'].map(t=>`<option ${j?.type===t?'selected':''}>${t}</option>`).join('')}</select></div>
-        <div class="flex-1"><label class="form-label">Ref#</label><input id="jf-ref" class="form-input" value="${j?.ref_no||''}"></div>
+        <div class="flex-1"><label class="form-label" style="margin-bottom:3px;">Type</label><select id="jf-type" class="form-input text-xs">${['JE','CR','CD','AP','AR','BR'].map(t=>`<option ${j?.type===t?'selected':''}>${t}</option>`).join('')}</select></div>
+        <div class="flex-1"><label class="form-label" style="margin-bottom:3px;">Ref#</label><input id="jf-ref" class="form-input text-xs" value="${j?.ref_no||''}"></div>
       </div>
     </div>
-    <div><label class="form-label">Description *</label><input id="jf-desc" class="form-input" value="${j?.description||''}" placeholder="Journal description"></div>
+    <div><label class="form-label" style="margin-bottom:3px;">Description *</label><input id="jf-desc" class="form-input text-xs" value="${j?.description||''}" placeholder="Journal description"></div>
     <div>
-      <div class="flex items-center justify-between mb-2">
+      <div class="flex items-center justify-between mb-1">
         <label class="form-label mb-0">Journal Lines</label>
         <button type="button" class="text-xs text-blue-600 hover:underline" onclick="addJnlLine()">+ Add Line</button>
       </div>
       <div id="jnl-lines-container"></div>
-      <div class="flex justify-between text-xs font-semibold mt-2 px-1">
-        <span>Total Debit: <span id="jf-total-db" class="text-green-700">0.00</span></span>
-        <span>Total Credit: <span id="jf-total-cr" class="text-blue-700">0.00</span></span>
+      <div class="flex justify-between text-xs font-semibold mt-1 px-1 py-1 rounded" style="background:#f8fafc;">
+        <span>Debit: <span id="jf-total-db" class="text-green-700">0.00</span></span>
+        <span>Credit: <span id="jf-total-cr" class="text-blue-700">0.00</span></span>
         <span id="jf-balance-status" class="text-red-600">Unbalanced</span>
       </div>
     </div>
