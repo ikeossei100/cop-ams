@@ -3124,7 +3124,19 @@ function processContribSheet(wb) {
     const bank_account_code = String(r[col('bank_account_code')]||'1110').trim() || '1110';
 
     // account_code may come as "4051 - Account Name" from the dropdown — extract just the code
-    const resolvedCode = acctCode.includes(' - ') ? acctCode.split(' - ')[0].trim() : acctCode;
+    let resolvedCode = acctCode.includes(' - ') ? acctCode.split(' - ')[0].trim() : acctCode;
+
+    // If account is 4020 (Tithes & Offering) and a district name is provided,
+    // automatically resolve to that district's sub-account code
+    const rawDistrict = String(r[col('district')]||'').trim();
+    if (resolvedCode === '4020' && rawDistrict) {
+      const districtAccts = coaCache.filter(a => a.parent_code === '4020' && a.active !== false);
+      const match = districtAccts.find(a => a.name.trim().toLowerCase() === rawDistrict.trim().toLowerCase());
+      if (match) {
+        resolvedCode = match.code; // e.g. 4051, 4052, etc.
+      }
+      // If no match found, keep 4020 — user will see it in preview and can correct
+    }
 
     const row = {
       _rowNum: i + 1,
