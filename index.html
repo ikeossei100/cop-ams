@@ -2941,18 +2941,10 @@ async function saveContrib(id, status) {
 async function downloadContribTemplate() {
   if (typeof ExcelJS === 'undefined') { toast('ExcelJS library not loaded yet — try again in a moment.','error'); return; }
 
-  // Gather exactly the same accounts shown in the New Contribution form
-  const c = parseInt;
-  const incomeAccts = [
-    // 1. Tithes & Offering group header (4020)
-    ...coaCache.filter(a => a.code === '4020' && a.active !== false),
-    // 2. Offerings (4089–4116)
-    ...coaCache.filter(a => a.type==='Detail' && a.active!==false && c(a.code)>=4089 && c(a.code)<=4116)
-      .sort((a,b)=>(a.sort_order||0)-(b.sort_order||0)),
-    // 3. Mission Fund offerings (children of 4420)
-    ...coaCache.filter(a => a.type==='Detail' && a.active!==false && a.parent_code==='4420')
-      .sort((a,b)=>(a.sort_order||0)-(b.sort_order||0)),
-  ];
+  // Gather ALL active income accounts (4000–4999) for the dropdown
+  const incomeAccts = coaCache
+    .filter(a => a.active !== false && (parseInt(a.code)||0) >= 4000 && (parseInt(a.code)||0) <= 4999)
+    .sort((a,b) => (parseInt(a.code)||0) - (parseInt(b.code)||0));
 
   const wb = new ExcelJS.Workbook();
   wb.creator = 'COP AMS';
