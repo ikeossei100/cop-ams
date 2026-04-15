@@ -2941,10 +2941,22 @@ async function saveContrib(id, status) {
 async function downloadContribTemplate() {
   if (typeof ExcelJS === 'undefined') { toast('ExcelJS library not loaded yet — try again in a moment.','error'); return; }
 
-  // Gather ALL active income accounts (4000–4999) for the dropdown
-  const incomeAccts = coaCache
-    .filter(a => a.active !== false && (parseInt(a.code)||0) >= 4000 && (parseInt(a.code)||0) <= 4999)
-    .sort((a,b) => (parseInt(a.code)||0) - (parseInt(b.code)||0));
+  // District Tithes & Offering sub-accounts (children of 4020) — shown FIRST in dropdown
+  const districtTithesAccts = coaCache
+    .filter(a => a.active !== false && a.parent_code === '4020')
+    .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0) || a.name.localeCompare(b.name));
+
+  // All other active income Detail accounts (exclude 4020 children already above, exclude Group headers)
+  const otherIncomeAccts = coaCache
+    .filter(a => a.active !== false
+      && (parseInt(a.code) || 0) >= 4000
+      && (parseInt(a.code) || 0) <= 4999
+      && a.parent_code !== '4020'
+      && a.type !== 'Group')
+    .sort((a, b) => (parseInt(a.code) || 0) - (parseInt(b.code) || 0));
+
+  // Merge: district Tithes codes first, then all other offering types
+  const incomeAccts = [...districtTithesAccts, ...otherIncomeAccts];
 
   const wb = new ExcelJS.Workbook();
   wb.creator = 'COP AMS';
@@ -2988,9 +3000,9 @@ async function downloadContribTemplate() {
     'john@example.com',                                       // contributor_email
     '123 Main St, Toronto ON',                                // contributor_address
     'REF001',                                                 // ref_no
-    incomeAccts[0]?.code || '4051',                           // account_code
+    districtTithesAccts[0]?.code || '4051',                    // account_code (example: first district)
     '1110',                                                   // bank_account_code
-    incomeAccts[0] ? `${incomeAccts[0].name}` : 'Sunday Offering', // description
+    districtTithesAccts[0] ? `${districtTithesAccts[0].name}` : 'Tithes & Offering', // description
     '250.00',                                                 // amount
     'Toronto Central',                                        // district
     ''                                                        // notes
@@ -3023,7 +3035,7 @@ async function downloadContribTemplate() {
   a.href = url; a.download = 'Contribution_Import_Template.xlsx';
   document.body.appendChild(a); a.click();
   document.body.removeChild(a); URL.revokeObjectURL(url);
-  toast('Template downloaded — click any cell in the account_code column (H) to see the account dropdown.', 'success');
+  toast(`Template downloaded — column H has a dropdown with ${districtTithesAccts.length} Tithes district codes first, then all other offering types.`, 'success');
 }
 
 let _contribImportRows = [];  // parsed valid rows ready to import
