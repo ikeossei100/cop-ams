@@ -1627,10 +1627,16 @@ async function authRegister() {
     const uid = data.user?.id;
     if (uid) {
       // 2. Create profile row — is_approved: false until admin approves
-      // is_approved defaults to false — run the Supabase SQL migration first:
-      // ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS is_approved BOOLEAN DEFAULT FALSE;
-      const profileData = { id: uid, full_name: name, role, district: district||null, is_active: true, is_approved: false, failed_attempts: 0 };
-      await sb.from('profiles').upsert(profileData, { onConflict: 'id' });
+      // Enforce no admin self-registration regardless of form state
+      const safeRole = (role === 'admin') ? 'viewer' : role;
+      const profileData = { id: uid, full_name: name, role: safeRole, district: district||null, is_active: true, is_approved: false, failed_attempts: 0 };
+      const { error: profileErr } = await sb.from('profiles').upsert(profileData, { onConflict: 'id' });
+      if (profileErr) {
+        console.warn('Profile creation failed:', profileErr);
+        okEl.textContent = 'Auth account created but your profile could not be saved (' + (profileErr.message||profileErr.code) + '). Please ask the administrator to add your profile manually in User Management.';
+        okEl.classList.remove('hidden');
+        return;
+      }
     }
 
     okEl.textContent = 'Account created! Your account is pending approval by an administrator. You will be notified when access is granted.';
@@ -8227,7 +8233,7 @@ async function saveNewUser() {
   const role=document.getElementById('uf-role').value;
   const district=document.getElementById('uf-dist').value.trim();
   if(!full_name||!id){toast('Name and User ID required.','error');return;}
-  const {error}=await sb.from('profiles').insert({id,full_name,role,district,is_active:true});
+  const {error}=await sb.from('profiles').insert({id,full_name,role,district:district||null,is_active:true,is_approved:true,failed_attempts:0});
   if(error){toast('Error: '+error.message,'error');return;}
   await logAction('CREATE_USER','profiles',id,null,{full_name,role});
   closeModal(); await loadUsers(); toast('User profile created.','success');
