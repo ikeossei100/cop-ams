@@ -1616,9 +1616,15 @@ async function authRegister() {
     errEl.classList.remove('hidden'); return;
   }
 
+  // Enforce no admin self-registration regardless of form state
+  const safeRole = (role === 'admin') ? 'viewer' : role;
+
   try {
-    // 1. Create Supabase Auth user
-    const { data, error } = await sb.auth.signUp({ email, password });
+    // 1. Create Supabase Auth user — pass metadata so the DB trigger can auto-create the profile
+    const { data, error } = await sb.auth.signUp({
+      email, password,
+      options: { data: { full_name: name, role: safeRole, district: district || null } }
+    });
     if (error) {
       errEl.textContent = error.message || 'Could not create account.';
       errEl.classList.remove('hidden'); return;
@@ -1626,17 +1632,10 @@ async function authRegister() {
 
     const uid = data.user?.id;
     if (uid) {
-      // 2. Create profile row — is_approved: false until admin approves
-      // Enforce no admin self-registration regardless of form state
-      const safeRole = (role === 'admin') ? 'viewer' : role;
+      // 2. Also try direct profile upsert (works if session is active; trigger is the reliable fallback)
       const profileData = { id: uid, full_name: name, role: safeRole, district: district||null, is_active: true, is_approved: false, failed_attempts: 0 };
       const { error: profileErr } = await sb.from('profiles').upsert(profileData, { onConflict: 'id' });
-      if (profileErr) {
-        console.warn('Profile creation failed:', profileErr);
-        okEl.textContent = 'Auth account created but your profile could not be saved (' + (profileErr.message||profileErr.code) + '). Please ask the administrator to add your profile manually in User Management.';
-        okEl.classList.remove('hidden');
-        return;
-      }
+      if (profileErr) console.warn('Direct profile upsert failed (trigger will handle it):', profileErr);
     }
 
     okEl.textContent = 'Account created! Your account is pending approval by an administrator. You will be notified when access is granted.';
