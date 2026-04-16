@@ -438,6 +438,9 @@ tailwind.config = {
   <!-- ── Tab: Overview ── -->
   <div id="dash-panel-overview">
 
+    <!-- District scope banner -->
+    <div id="dash-district-banner" style="display:none;background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:600;color:#1e40af;margin-bottom:12px;"></div>
+
     <!-- Month navigator -->
     <div class="flex items-center justify-between mb-4">
       <div class="flex items-center gap-2">
@@ -4355,6 +4358,19 @@ async function getPostedContribs(from,to) {
   q = reportContribFilter(q);
   const {data}=await q;
   return data||[];
+}
+
+// Dashboard-specific filters — contributions filtered by district field, journals by entered_by
+function dashContribFilter(q) {
+  const role = currentProfile?.role;
+  const district = currentProfile?.district;
+  if (role === 'admin') return q;
+  if (district) return q.eq('district', district);
+  return withUser(q); // no district on profile — fall back to entered_by
+}
+function dashJournalFilter(q) {
+  if (currentProfile?.role === 'admin') return q;
+  return withUser(q);
 }
 
 function buildAccountBalances(journals,contribs) {
@@ -8684,6 +8700,22 @@ async function loadDashboard() {
   setLbl('dash-expense-label',`Expenses (${statLabel})`);
   setLbl('dash-contrib-label',`Contributions Posted (${statLabel})`);
 
+  // Show district label for non-admin users
+  const districtBannerEl = document.getElementById('dash-district-banner');
+  if (districtBannerEl) {
+    const role = currentProfile?.role;
+    const district = currentProfile?.district;
+    if (role !== 'admin' && district) {
+      districtBannerEl.textContent = `Showing data for: ${district}`;
+      districtBannerEl.style.display = 'block';
+    } else if (role === 'admin') {
+      districtBannerEl.textContent = 'Showing data for: All Districts';
+      districtBannerEl.style.display = 'block';
+    } else {
+      districtBannerEl.style.display = 'none';
+    }
+  }
+
   // Chart label & config
   const chartLabelEl = document.getElementById('dash-chart-label');
   if(chartLabelEl) chartLabelEl.textContent = viewMode==='month' ? `Daily Income vs Expense – ${shortMonths[navM]} ${navY}` : `Monthly Income vs Expense – ${navY}`;
@@ -8692,12 +8724,17 @@ async function loadDashboard() {
     // For month view: fetch just that month; for ytd/year fetch the full year for the chart
     const chartFrom = `${navY}-01-01`;
     const chartTo   = viewMode==='year' ? `${navY}-12-31` : `${navY}-${navMStr}-${String(lastDayOfNavM).padStart(2,'0')}`;
+    // Build district-filtered dashboard queries
+    const mkJnl   = async (f,t) => { let q=sb.from('journals').select('*').eq('status','posted').gte('date',f).lte('date',t); q=dashJournalFilter(q); const {data}=await q; return data||[]; };
+    const mkCon   = async (f,t) => { let q=sb.from('contributions').select('*').eq('status','posted').gte('date',f).lte('date',t); q=dashContribFilter(q); const {data}=await q; return data||[]; };
+    const mkDraft = async (f,t) => { let q=sb.from('contributions').select('id,amount,account_code,date,contributor_name,district').eq('status','draft').gte('date',f).lte('date',t); q=dashContribFilter(q); const {data}=await q; return data||[]; };
+
     const [jnl, con, jnlStat, conStat, draftConStat] = await Promise.all([
-      getPostedJournals(chartFrom, chartTo),   // for yearly chart
-      getPostedContribs(chartFrom, chartTo),
-      getPostedJournals(from, to),             // for stat cards
-      getPostedContribs(from, to),
-      sb.from('contributions').select('id,amount,account_code,date,contributor_name,district').eq('status','draft').gte('date',from).lte('date',to).then(r => r.data || [])
+      mkJnl(chartFrom, chartTo),   // for yearly chart
+      mkCon(chartFrom, chartTo),
+      mkJnl(from, to),             // for stat cards
+      mkCon(from, to),
+      mkDraft(from, to)
     ]);
 
     // Stat card totals (use stat-range data)
