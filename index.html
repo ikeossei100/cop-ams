@@ -4670,6 +4670,7 @@ async function genBalanceSheet(from,to) {
 // ── National Offering Summary ─────────────────────────────────────────────
 let _nationalCache = null; // stored for PDF/Excel export
 let _stmtContributorName = ''; // contributor name for PDF header
+let _stmtContributorData = {}; // full contributor info used in PDF export
 
 async function exportNationalPDF() {
   if (!_nationalCache) { toast('Generate the report first.', 'error'); return; }
@@ -5435,6 +5436,14 @@ async function genContributorStatement(from,to) {
   // Grab contact details from first record
   const first=list[0]||{};
   _stmtContributorName = first.contributor_name || name || envNo || phone || '';
+  _stmtContributorData = {
+    name:     first.contributor_name || name || envNo || phone || '',
+    address:  first.contributor_address || '',
+    district: first.district || '',
+    envelope: first.envelope_number || '',
+    phone:    first.contributor_phone || '',
+    email:    first.contributor_email || '',
+  };
   const grandTotal=list.reduce((s,c)=>s+(parseFloat(c.amount)||0),0);
   const rows=list.map((c,i)=>{
     const a=coaCache.find(x=>x.code===c.account_code);
@@ -5715,25 +5724,24 @@ async function exportAllContributorStatementsPDF(byContrib, from, to) {
 
     // Contributor details box
     let y=46;
-    const boxH=first.envelope_number?32:26;
-    doc.setFillColor(248,247,244); doc.rect(14,y,pageW-28,boxH,'F');
+    const detailLines=[];
+    if(first.envelope_number) detailLines.push(`Envelope No: ${first.envelope_number}`);
+    if(first.contributor_address) detailLines.push(first.contributor_address.replace(/\n/g,', '));
+    if(first.district) detailLines.push(`District: ${first.district}`);
+    if(first.contributor_phone) detailLines.push(`Phone: ${first.contributor_phone}`);
+    if(first.contributor_email) detailLines.push(`Email: ${first.contributor_email}`);
+    const lineH=5.5;
+    const boxH=Math.max(20,10+lineH+detailLines.length*lineH);
+    doc.setFillColor(241,245,255); doc.rect(14,y,pageW-28,boxH,'F');
+    doc.setFillColor(26,60,143); doc.rect(14,y,3,boxH,'F');
     doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.setTextColor(17,24,39);
-    doc.text(first.contributor_name||name,17,y+7);
-    if(first.envelope_number){
-      doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(26,60,143);
-      doc.text(`Envelope No. ${first.envelope_number}`,17,y+13);
-      doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(75,85,99);
-      let detailY=y+19;
-      if(first.contributor_address){ doc.text(first.contributor_address.replace(/\n/g,' | '),17,detailY); detailY+=5; }
-      const contactLine=[first.contributor_phone?`Phone: ${first.contributor_phone}`:'', first.contributor_email?`Email: ${first.contributor_email}`:'', first.district?`District: ${first.district}`:''].filter(Boolean).join('   ');
-      if(contactLine) doc.text(contactLine,17,detailY);
-    } else {
-      doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(75,85,99);
-      let detailY=y+13;
-      if(first.contributor_address){ doc.text(first.contributor_address.replace(/\n/g,' | '),17,detailY); detailY+=5; }
-      const contactLine=[first.contributor_phone?`Phone: ${first.contributor_phone}`:'', first.contributor_email?`Email: ${first.contributor_email}`:'', first.district?`District: ${first.district}`:''].filter(Boolean).join('   ');
-      if(contactLine) doc.text(contactLine,17,detailY);
-    }
+    doc.text(first.contributor_name||name,20,y+8);
+    // CRA number top-right of box
+    doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.setTextColor(26,60,143);
+    doc.text('CRA Reg. No: 8966227972RR0001',pageW-16,y+8,{align:'right'});
+    doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(55,65,81);
+    let detailY=y+8;
+    detailLines.forEach(l=>{ detailY+=lineH; doc.text(l,20,detailY); });
     y+=boxH+6;
 
     // Entries table
@@ -5755,8 +5763,22 @@ async function exportAllContributorStatementsPDF(byContrib, from, to) {
     });
 
     const finalY=doc.lastAutoTable.finalY+6;
-    doc.setFontSize(10); doc.setTextColor(156,163,175); doc.setFont('helvetica','italic');
+    doc.setFontSize(9); doc.setTextColor(156,163,175); doc.setFont('helvetica','italic');
     doc.text('This statement reflects posted contributions only.',14,finalY);
+
+    // Signature block
+    const sigY=252;
+    doc.setDrawColor(180,180,180); doc.line(14,sigY,pageW-14,sigY);
+    doc.setFont('helvetica','italic'); doc.setFontSize(8); doc.setTextColor(100,100,100);
+    doc.text('Church of Pentecost Canada Inc — Charitable Registration No: 8966227972RR0001',14,sigY+5);
+    doc.text('This receipt is issued for income tax purposes. Please retain for your records.',14,sigY+10);
+    // Signature line
+    doc.setDrawColor(60,60,60); doc.line(pageW-84,sigY+24,pageW-14,sigY+24);
+    doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(80,80,80);
+    doc.text('Authorized Officer Signature',pageW-49,sigY+29,{align:'center'});
+    // Date line
+    doc.line(14,sigY+24,80,sigY+24);
+    doc.text('Date',47,sigY+29,{align:'center'});
 
     // Page number for this contributor's section
     doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(150,150,150);
@@ -6174,41 +6196,42 @@ function exportReportPDF() {
   // For contributor statement: render contributor info block
   let y=48;
   if(activeReport==='contributor-statement'){
-    const box=document.getElementById('stmt-contributor-box');
-    if(box){
-      // Extract structured data directly from the DOM
-      const nameEl=box.querySelector('p.font-bold');
-      const contribName=nameEl?nameEl.textContent.trim():'';
-      const allPs=[...box.querySelectorAll('p')].map(p=>p.textContent.trim()).filter(Boolean);
-      // Find envelope number — look for the sky-blue paragraph
-      const envEl=box.querySelector('p[style*="0284c7"]');
-      const envText=envEl?envEl.textContent.trim():'';
-      // Build detail lines (skip name and envelope — rendered separately)
-      const detailLines=allPs.filter(l=>l!==contribName&&l!==envText&&l!=='No envelope number assigned'&&l!=='Contributor');
+    const cd = _stmtContributorData;
+    const lineH = 5.5;
 
-      const lineH=5;
-      const totalLines=1+(envText?1:0)+detailLines.length;
-      const boxH=totalLines*lineH+10;
-      doc.setFillColor(248,247,244); doc.rect(14,y,pageW-28,boxH,'F');
+    // Build detail lines
+    const detailLines = [];
+    if (cd.envelope) detailLines.push(`Envelope No: ${cd.envelope}`);
+    if (cd.address)  detailLines.push(...cd.address.replace(/\n/g,', ').split(/[,;\n]/).map(s=>s.trim()).filter(Boolean).reduce((acc,s,i,arr)=>{
+      // Combine address into at most 2 lines of ~60 chars
+      if (!acc.length || (acc[acc.length-1]+', '+s).length > 60) acc.push(s);
+      else acc[acc.length-1] += ', '+s;
+      return acc;
+    },[]));
+    if (cd.district) detailLines.push(`District: ${cd.district}`);
+    if (cd.phone)    detailLines.push(`Phone: ${cd.phone}`);
+    if (cd.email)    detailLines.push(`Email: ${cd.email}`);
 
-      // Name
-      doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.setTextColor(17,24,39);
-      doc.text(contribName,17,y+7);
-      let lineY=y+7;
+    const boxH = Math.max(20, 10 + lineH + detailLines.length * lineH);
 
-      // Envelope number — highlighted in sky blue
-      if(envText){
-        lineY+=lineH;
-        doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(26,60,143);
-        doc.text(envText,17,lineY);
-      }
+    // Blue left bar + light background
+    doc.setFillColor(241,245,255); doc.rect(14,y,pageW-28,boxH,'F');
+    doc.setFillColor(26,60,143);   doc.rect(14,y,3,boxH,'F');
 
-      // Remaining details
-      doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(75,85,99);
-      detailLines.forEach(l=>{ lineY+=lineH; doc.text(l,17,lineY); });
+    // Contributor name
+    doc.setFont('helvetica','bold'); doc.setFontSize(13); doc.setTextColor(17,24,39);
+    doc.text(cd.name || _stmtContributorName, 20, y+8);
+    let lineY = y+8;
 
-      y+=boxH+6;
-    }
+    // Detail lines
+    doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(55,65,81);
+    detailLines.forEach(l=>{ lineY+=lineH; doc.text(l,20,lineY); });
+
+    // CRA number — top right of the box
+    doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.setTextColor(26,60,143);
+    doc.text('CRA Reg. No: 8966227972RR0001', pageW-16, y+8, {align:'right'});
+
+    y += boxH + 6;
   }
   if (activeReport === 'income-statement' && _isReportCache) {
     const c = _isReportCache;
@@ -6389,6 +6412,31 @@ function exportReportPDF() {
       }
     });
   }
+  // Contributor statement: add signature block and CRA footer on last page
+  if (activeReport === 'contributor-statement') {
+    const lastPage = doc.getNumberOfPages();
+    doc.setPage(lastPage);
+    const sigY = 252; // near bottom of A4 portrait (297mm)
+
+    // Horizontal rule above signature area
+    doc.setDrawColor(180,180,180); doc.line(14, sigY, pageW-14, sigY);
+
+    // CRA registration notice
+    doc.setFont('helvetica','italic'); doc.setFontSize(8); doc.setTextColor(100,100,100);
+    doc.text('Church of Pentecost Canada Inc — Charitable Registration No: 8966227972RR0001', 14, sigY+5);
+    doc.text('This receipt is issued for income tax purposes. Please retain for your records.', 14, sigY+10);
+
+    // Signature line — right side
+    const sigLineX = pageW - 14;
+    doc.setDrawColor(60,60,60); doc.line(sigLineX-70, sigY+24, sigLineX, sigY+24);
+    doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(80,80,80);
+    doc.text('Authorized Officer Signature', sigLineX-35, sigY+29, {align:'center'});
+
+    // Date line — left side
+    doc.setDrawColor(60,60,60); doc.line(14, sigY+24, 80, sigY+24);
+    doc.text('Date', 47, sigY+29, {align:'center'});
+  }
+
   const total=doc.getNumberOfPages();
   const pageH=isContrib?210:297;
   for(let i=1;i<=total;i++){ doc.setPage(i); doc.setFontSize(10); doc.setTextColor(150,150,150); doc.text(`Page ${i} of ${total}`,pageW-14,pageH-7,{align:'right'}); }
