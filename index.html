@@ -4671,6 +4671,21 @@ async function genBalanceSheet(from,to) {
 let _nationalCache = null; // stored for PDF/Excel export
 let _stmtContributorName = ''; // contributor name for PDF header
 let _stmtContributorData = {}; // full contributor info used in PDF export
+let _logoCacheB64 = null;      // cached logo base64 for PDF embedding
+async function getLogoBase64() {
+  if (_logoCacheB64) return _logoCacheB64;
+  try {
+    const resp = await fetch('logo/cop-logo.jpeg');
+    if (!resp.ok) return null;
+    const blob = await resp.blob();
+    return new Promise(resolve => {
+      const reader = new FileReader();
+      reader.onloadend = () => { _logoCacheB64 = reader.result; resolve(reader.result); };
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(blob);
+    });
+  } catch(e) { return null; }
+}
 
 async function exportNationalPDF() {
   if (!_nationalCache) { toast('Generate the report first.', 'error'); return; }
@@ -5700,6 +5715,9 @@ async function exportAllContributorStatementsPDF(byContrib, from, to) {
   const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
   const pageW=210;
 
+  // Fetch logo once for all pages
+  const logoB64 = await getLogoBase64();
+
   for(let ni=0;ni<names.length;ni++){
     if(ni>0) doc.addPage();
     const name=names[ni];
@@ -5709,10 +5727,12 @@ async function exportAllContributorStatementsPDF(byContrib, from, to) {
 
     // Letterhead
     doc.setFillColor(26,60,143); doc.rect(0,0,pageW,22,'F');
+    if (logoB64) { try { doc.addImage(logoB64,'JPEG',3,1,20,20); } catch(e){} }
+    const textX = logoB64 ? 26 : 14;
     doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(15);
-    doc.text('Church of Pentecost Canada Inc',14,10);
+    doc.text('Church of Pentecost Canada Inc',textX,10);
     doc.setFont('helvetica','normal'); doc.setFontSize(11);
-    doc.text('Head Office — General Fund',14,16);
+    doc.text('Head Office — General Fund',textX,16);
     doc.setFontSize(10); doc.setTextColor(150,150,150);
     doc.text(`Printed: ${new Date().toLocaleString('en-CA')}`,pageW-14,10,{align:'right'});
 
@@ -6158,7 +6178,7 @@ async function genJournalReport(from, to) {
 
 function printReport() { window.print(); }
 
-function exportReportPDF() {
+async function exportReportPDF() {
   // Resolve report title — Power Church reports use div headings, others use h2
   const reportTitleMap = {
     'balance-sheet': 'Balance Sheet',
@@ -6183,10 +6203,20 @@ function exportReportPDF() {
   const orientation=isContrib?'landscape':'portrait';
   const pageW=isContrib?297:210;
   const doc=new jsPDF({orientation,unit:'mm',format:'a4'});
+
+  // Fetch logo for contributor statement header
+  const isContribStmt = activeReport === 'contributor-statement';
+  const logoB64 = isContribStmt ? await getLogoBase64() : null;
+
   doc.setFillColor(26,60,143); doc.rect(0,0,pageW,22,'F');
+  // Logo — left side of header (contributor statement only)
+  if (logoB64) {
+    try { doc.addImage(logoB64,'JPEG',3,1,20,20); } catch(e) { /* logo load failed silently */ }
+  }
+  const textX = logoB64 ? 26 : 14; // shift text right if logo present
   doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(15);
-  doc.text('Church of Pentecost Canada Inc',14,10);
-  doc.setFont('helvetica','normal'); doc.setFontSize(11); doc.text('Head Office — General Fund',14,16);
+  doc.text('Church of Pentecost Canada Inc',textX,10);
+  doc.setFont('helvetica','normal'); doc.setFontSize(11); doc.text('Head Office — General Fund',textX,16);
   doc.setTextColor(26,60,143); doc.setFont('helvetica','bold'); doc.setFontSize(16);
   doc.text(title,14,32);
   doc.setFont('helvetica','normal'); doc.setFontSize(11); doc.setTextColor(100,100,100);
