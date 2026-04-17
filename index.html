@@ -901,7 +901,7 @@ tailwind.config = {
       <div class="font-semibold text-sm text-gray-700">Journal Report</div>
       <div class="text-xs text-gray-400 mt-1">All journal entries by date</div>
     </div>
-    <div class="card p-4 cursor-pointer hover:border-[#0284c7] hover:border-2 transition-colors md:col-span-4" onclick="runReport('national-summary')" style="border:2px solid #0284c7;background:linear-gradient(135deg,#f0f9ff,#e0f2fe);">
+    <div class="card p-4 cursor-pointer hover:border-[#0284c7] hover:border-2 transition-colors md:col-span-4 role-admin-only" onclick="runReport('national-summary')" style="border:2px solid #0284c7;background:linear-gradient(135deg,#f0f9ff,#e0f2fe);">
       <div class="flex items-center justify-between flex-wrap gap-3">
         <div class="flex items-center gap-3">
           <span style="font-size:2rem;">🇨🇦</span>
@@ -5067,6 +5067,10 @@ async function runDistrictBreakdownExport() {
 }
 
 async function genNationalSummary(from, to) {
+  if (currentProfile?.role !== 'admin') {
+    toast('Access denied — National Summary is restricted to administrators.', 'error');
+    return;
+  }
   const content = document.getElementById('report-content');
   content.innerHTML = '<div class="text-center text-gray-400 py-8">Loading national summary…</div>';
 
