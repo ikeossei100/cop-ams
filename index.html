@@ -5195,14 +5195,12 @@ async function genNationalSummary(from, to) {
     // For other categories: sum accountTotals as usual
     let catTotal;
     if (cat.perDistrict) {
+      // districtCodeTotals is already filtered to the selected district when districtSelected=true,
+      // so summing all entries is always correct — no name-matching needed.
       const subTotal = Object.values(districtCodeTotals).reduce((s,v) => s + Math.max(0,v), 0) + Math.max(0, importedTotal);
-      if (districtSelected) {
-        // Find the code for the selected district
-        const selAcct = districtAccounts.find(a => a.name === _rptUserFilter);
-        catTotal = selAcct ? Math.max(0, districtCodeTotals[selAcct.code] || 0) : 0;
-      } else {
-        catTotal = subTotal;
-      }
+      catTotal = districtSelected
+        ? Object.values(districtCodeTotals).reduce((s,v) => s + Math.max(0,v), 0)
+        : subTotal;
     } else {
       catTotal = cat.codes.reduce((s,c) => s + Math.max(0, accountTotals[c]||0), 0);
     }
@@ -5221,10 +5219,8 @@ async function genNationalSummary(from, to) {
       if (unmatched > 0) distRows.push({ code:'4020', name:'Unclassified (posted to group)', amt: unmatched });
       // Show imported total
       if (!districtSelected && importedTotal > 0) distRows.push({ code:'', name:'Imported (All Districts)', amt: Math.max(0, importedTotal) });
-      if (districtSelected) {
-        const selAcct = districtAccounts.find(a => a.name === _rptUserFilter);
-        distRows = selAcct ? distRows.filter(r => r.code === selAcct.code) : [];
-      }
+      // When district is selected, distRows is already built from filtered data — no name lookup needed.
+      // Just keep rows that have non-zero amounts (already filtered above).
       distRows.sort((a,b) => b.amt - a.amt);
 
       cacheRows = distRows;
