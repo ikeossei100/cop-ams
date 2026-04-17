@@ -2500,7 +2500,7 @@ function exportAccountActivityCSV() {
   downloadCSV(rows,`Account_Activity_${code}_${from}_${to}.csv`);
 }
 
-function exportAccountActivityPDF() {
+async function exportAccountActivityPDF() {
   if(!currentActivityData){toast('Load activity first.','error');return;}
   if(typeof window.jspdf==='undefined'){toast('jsPDF not loaded.','error');return;}
   const {code, acct, from, to, entries, openingBalance, closingBalance, totalDb, totalCr} = currentActivityData;
@@ -2508,13 +2508,7 @@ function exportAccountActivityPDF() {
   const doc=new jsPDF({orientation:'landscape',unit:'mm',format:'a4'});
 
   // Letterhead
-  doc.setFillColor(26,60,143); doc.rect(0,0,297,22,'F');
-  doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(15);
-  doc.text('Church of Pentecost Canada Inc',14,10);
-  doc.setFont('helvetica','normal'); doc.setFontSize(11);
-  doc.text('Head Office — General Fund',14,16);
-  doc.setFontSize(10); doc.setTextColor(150,150,150);
-  doc.text(`Printed: ${new Date().toLocaleString('en-CA')}`,283,10,{align:'right'});
+  await drawPdfLetterhead(doc, 297);
 
   // Title
   doc.setTextColor(26,60,143); doc.setFont('helvetica','bold'); doc.setFontSize(15);
@@ -3686,30 +3680,27 @@ function exportJnlCSV() {
   downloadCSV(rows,'Journals.csv');
 }
 
-function exportJnlPDF() {
+async function exportJnlPDF() {
   if(!journalData||!journalData.length){toast('No journal data to export.','error');return;}
   if(typeof window.jspdf==='undefined'){toast('jsPDF not loaded.','error');return;}
   const {jsPDF}=window.jspdf;
   const doc=new jsPDF({orientation:'landscape',unit:'mm',format:'a4'});
   const pageW=297, pageH=210, marginL=14, marginR=14;
 
-  // — Header — drawn once, page added via autoTable's didDrawPage
   const monthVal=document.getElementById('jnl-month')?.value||'';
   const printDate=new Date().toLocaleString('en-CA',{year:'numeric',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+  const logoB64 = await getLogoBase64();
 
   function drawPageHeader(doc){
-    // Dark blue bar
     doc.setFillColor(26,60,143);
     doc.rect(0,0,pageW,20,'F');
-    // Church name
+    if (logoB64) { try { doc.addImage(logoB64,'JPEG',3,1,18,18); } catch(e){} }
+    const hx = logoB64 ? 24 : marginL;
     doc.setTextColor(255,255,255);
-    doc.setFont('helvetica','bold');
-    doc.setFontSize(13);
-    doc.text('Church of Pentecost Canada Inc',marginL,9);
-    doc.setFont('helvetica','normal');
-    doc.setFontSize(9);
-    doc.text('Journal Report',marginL,16);
-    // Period & print date on right
+    doc.setFont('helvetica','bold'); doc.setFontSize(13);
+    doc.text('Church of Pentecost Canada Inc', hx, 9);
+    doc.setFont('helvetica','normal'); doc.setFontSize(9);
+    doc.text('Journal Report', hx, 16);
     doc.setFontSize(8);
     doc.text(`Period: ${monthVal||'All'}`,pageW-marginR,9,{align:'right'});
     doc.text(`Printed: ${printDate}`,pageW-marginR,16,{align:'right'});
@@ -4236,6 +4227,7 @@ async function printAllDistrictsReport() {
   const fmtDate = d => new Date(d+'T00:00:00').toLocaleDateString('en-CA',{year:'numeric',month:'short',day:'numeric'});
   const pageW = 210;
   let isFirstPage = true;
+  const logoB64 = await getLogoBase64();
 
   for (const district of districts) {
     // Set district filter
@@ -4248,11 +4240,13 @@ async function printAllDistrictsReport() {
     // ── Header ──
     doc.setFillColor(26, 60, 143);
     doc.rect(0, 0, pageW, 22, 'F');
+    if (logoB64) { try { doc.addImage(logoB64,'JPEG',3,1,20,20); } catch(e){} }
+    const hx = logoB64 ? 26 : 14;
     doc.setTextColor(255, 255, 255);
     doc.setFont('helvetica', 'bold'); doc.setFontSize(14);
-    doc.text('Church of Pentecost Canada Inc', 14, 10);
+    doc.text('Church of Pentecost Canada Inc', hx, 10);
     doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
-    doc.text(activeReport === 'income-statement' ? 'Income & Expense Statement' : 'Balance Sheet', 14, 17);
+    doc.text(activeReport === 'income-statement' ? 'Income & Expense Statement' : 'Balance Sheet', hx, 17);
     doc.setFontSize(9); doc.setTextColor(180, 200, 255);
     doc.text(`District: ${district}`, pageW - 14, 10, { align: 'right' });
     doc.text(`Period: ${fmtDate(from)} — ${fmtDate(to)}`, pageW - 14, 17, { align: 'right' });
@@ -4687,21 +4681,39 @@ async function getLogoBase64() {
   } catch(e) { return null; }
 }
 
+// Draws the standard blue letterhead on any jsPDF doc — call once per page for single-page,
+// or use in didDrawPage for multi-page autoTable exports.
+async function drawPdfLetterhead(doc, pageW, line1, line2, printDate) {
+  const logoB64 = await getLogoBase64();
+  doc.setFillColor(26,60,143); doc.rect(0,0,pageW,22,'F');
+  if (logoB64) { try { doc.addImage(logoB64,'JPEG',3,1,20,20); } catch(e){} }
+  const txX = logoB64 ? 26 : 14;
+  doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(15);
+  doc.text(line1 || 'Church of Pentecost Canada Inc', txX, 10);
+  doc.setFont('helvetica','normal'); doc.setFontSize(11);
+  doc.text(line2 || 'Head Office — General Fund', txX, 16);
+  doc.setFontSize(10); doc.setTextColor(150,150,150);
+  doc.text(printDate || `Printed: ${new Date().toLocaleString('en-CA')}`, pageW-14, 10, {align:'right'});
+}
+
 async function exportNationalPDF() {
   if (!_nationalCache) { toast('Generate the report first.', 'error'); return; }
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-  const { from, to, categories, grandTotal } = _nationalCache;
+  const { from, to, categories, grandTotal, districtLabel } = _nationalCache;
   const fmt2 = n => '$' + Math.max(0,n).toLocaleString('en-CA',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const logoB64 = await getLogoBase64();
 
   // Header
   doc.setFillColor(26,60,143);
   doc.rect(0,0,210,22,'F');
+  if (logoB64) { try { doc.addImage(logoB64,'JPEG',3,1,20,20); } catch(e){} }
+  const txX = logoB64 ? 26 : 14;
   doc.setTextColor(255,255,255);
   doc.setFontSize(13); doc.setFont('helvetica','bold');
-  doc.text('Church of Pentecost Canada Inc', 14, 10);
+  doc.text('Church of Pentecost Canada Inc', txX, 10);
   doc.setFontSize(9); doc.setFont('helvetica','normal');
-  doc.text('National Offering Summary — All Districts Combined', 14, 17);
+  doc.text(`National Offering Summary — ${districtLabel || 'All Districts'}`, txX, 17);
   doc.setTextColor(100,100,100);
   doc.setFontSize(8);
   doc.text(`Period: ${from} to ${to}   |   Generated: ${new Date().toLocaleDateString('en-CA')}`, 14, 28);
@@ -4742,7 +4754,8 @@ async function exportNationalPDF() {
   doc.text('GRAND TOTAL — ALL OFFERINGS', 17, y+7);
   doc.text(fmt2(grandTotal), 196, y+7, { align:'right' });
 
-  doc.save(`National_Offering_Summary_${from}_${to}.pdf`);
+  const distSlug = (districtLabel && districtLabel !== 'All Districts') ? `_${districtLabel.replace(/\s+/g,'_')}` : '';
+  doc.save(`National_Offering_Summary${distSlug}_${from}_${to}.pdf`);
 }
 
 async function exportNationalExcel() {
@@ -5305,8 +5318,9 @@ async function genNationalSummary(from, to) {
       </div>`;
   });
 
-  // Store for export
-  _nationalCache = { from, to, categories: cacheCategories, grandTotal };
+  // Store for export — include district context so PDF subtitle is accurate
+  const districtLabel = districtSelected ? _rptUserFilter : 'All Districts';
+  _nationalCache = { from, to, categories: cacheCategories, grandTotal, districtLabel };
 
   content.innerHTML = `
     <!-- Header -->
@@ -6204,25 +6218,12 @@ async function exportReportPDF() {
   const pageW=isContrib?297:210;
   const doc=new jsPDF({orientation,unit:'mm',format:'a4'});
 
-  // Fetch logo for contributor statement header
-  const isContribStmt = activeReport === 'contributor-statement';
-  const logoB64 = isContribStmt ? await getLogoBase64() : null;
-
-  doc.setFillColor(26,60,143); doc.rect(0,0,pageW,22,'F');
-  // Logo — left side of header (contributor statement only)
-  if (logoB64) {
-    try { doc.addImage(logoB64,'JPEG',3,1,20,20); } catch(e) { /* logo load failed silently */ }
-  }
-  const textX = logoB64 ? 26 : 14; // shift text right if logo present
-  doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(15);
-  doc.text('Church of Pentecost Canada Inc',textX,10);
-  doc.setFont('helvetica','normal'); doc.setFontSize(11); doc.text('Head Office — General Fund',textX,16);
+  // Letterhead with logo on all report PDFs
+  await drawPdfLetterhead(doc, pageW);
   doc.setTextColor(26,60,143); doc.setFont('helvetica','bold'); doc.setFontSize(16);
   doc.text(title,14,32);
   doc.setFont('helvetica','normal'); doc.setFontSize(11); doc.setTextColor(100,100,100);
   doc.text(`Period: ${from} to ${to}`,14,39);
-  doc.setFontSize(10); doc.setTextColor(150,150,150);
-  doc.text(`Printed: ${new Date().toLocaleString('en-CA')}`,pageW-14,10,{align:'right'});
   // For contributor statement: render contributor info block
   let y=48;
   if(activeReport==='contributor-statement'){
@@ -7413,21 +7414,13 @@ function showImportPostPreview() {
   );
 }
 
-function exportImportPDF() {
+async function exportImportPDF() {
   if(!lastImportRecord){toast('No import data to export.','error');return;}
   if(typeof window.jspdf==='undefined'){toast('jsPDF not loaded.','error');return;}
   const {jsPDF}=window.jspdf;
   const rec=lastImportRecord;
   const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
-
-  // Letterhead
-  doc.setFillColor(26,60,143); doc.rect(0,0,210,22,'F');
-  doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(15);
-  doc.text('Church of Pentecost Canada Inc',14,10);
-  doc.setFont('helvetica','normal'); doc.setFontSize(11);
-  doc.text('Head Office — General Fund',14,16);
-  doc.setFontSize(10); doc.setTextColor(150,150,150);
-  doc.text(`Printed: ${new Date().toLocaleString('en-CA')}`,196,10,{align:'right'});
+  await drawPdfLetterhead(doc, 210);
 
   // Title block
   doc.setTextColor(26,60,143); doc.setFont('helvetica','bold'); doc.setFontSize(16);
@@ -7662,21 +7655,14 @@ function exportDistrictSummaryCSV() {
   downloadCSV(rows, `District_Income_${monthLabel}_${yr}.csv`);
 }
 
-function exportDistrictSummaryPDF() {
+async function exportDistrictSummaryPDF() {
   if (!districtSummaryData) { toast('Load the summary first.', 'error'); return; }
   if (typeof window.jspdf === 'undefined') { toast('jsPDF not loaded.', 'error'); return; }
   const { jsPDF } = window.jspdf;
   const { districtAccounts, totals, monthLabel, yr, periodFrom, periodTo, ytdFrom, ytdTo } = districtSummaryData;
 
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-  // Letterhead
-  doc.setFillColor(26,60,143); doc.rect(0,0,210,22,'F');
-  doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(15);
-  doc.text('Church of Pentecost Canada Inc', 14, 10);
-  doc.setFont('helvetica','normal'); doc.setFontSize(11);
-  doc.text('District Income Summary', 14, 16);
-  doc.setFontSize(10); doc.setTextColor(200,230,255);
-  doc.text(`Printed: ${new Date().toLocaleString('en-CA')}`, 196, 10, {align:'right'});
+  await drawPdfLetterhead(doc, 210, 'Church of Pentecost Canada Inc', 'District Income Summary');
 
   // Title block
   doc.setTextColor(26,60,143); doc.setFont('helvetica','bold'); doc.setFontSize(16);
@@ -8660,20 +8646,13 @@ function exportDashActivityCSV() {
   downloadCSV(rows,`Account_Activity_${dashActivityData.code}_${from}_${to}.csv`);
 }
 
-function exportDashActivityPDF() {
+async function exportDashActivityPDF() {
   if(!dashActivityData){toast('Run a search first.','error');return;}
   if(typeof window.jspdf==='undefined'){toast('jsPDF not loaded.','error');return;}
   const {code,label,from,to,entries,openBal,closeBal,totalDb,totalCr,primaryAcct}=dashActivityData;
   const {jsPDF}=window.jspdf;
   const doc=new jsPDF({orientation:'landscape',unit:'mm',format:'a4'});
-
-  doc.setFillColor(26,60,143); doc.rect(0,0,297,22,'F');
-  doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(15);
-  doc.text('Church of Pentecost Canada Inc',14,10);
-  doc.setFont('helvetica','normal'); doc.setFontSize(11);
-  doc.text('Head Office — General Fund',14,16);
-  doc.setFontSize(10); doc.setTextColor(150,150,150);
-  doc.text(`Printed: ${new Date().toLocaleString('en-CA')}`,283,10,{align:'right'});
+  await drawPdfLetterhead(doc, 297);
 
   doc.setTextColor(26,60,143); doc.setFont('helvetica','bold'); doc.setFontSize(15);
   doc.text(`Account Activity — ${label}`,14,32);
