@@ -2943,6 +2943,9 @@ async function saveContrib(id, status) {
 async function downloadContribTemplate() {
   if (typeof ExcelJS === 'undefined') { toast('ExcelJS library not loaded yet — try again in a moment.','error'); return; }
 
+  // Ensure COA is loaded before building account list
+  if (!coaCache || coaCache.length === 0) await initCOACache();
+
   // District Tithes & Offering sub-accounts (children of 4020) — shown FIRST in dropdown
   const districtTithesAccts = coaCache
     .filter(a => a.active !== false && a.parent_code === '4020')
@@ -3012,19 +3015,22 @@ async function downloadContribTemplate() {
 
   ws.views = [{ state: 'frozen', ySplit: 1 }];
 
-  // ── Data validation: account_code column = H (index 8, col 8) ──
-  // Reference the hidden sheet directly — works reliably in Excel for long lists.
+  // ── Data validation dropdowns ──
+  // Both account_code (col H) and description (col J) get the offering type list.
   const formula = `_AccountList!$A$1:$A$${listLastRow}`;
-  // account_code is column H (8th column, letter H)
-  const acctCol = 'H';
   for (let row = 2; row <= 500; row++) {
-    ws.getCell(`${acctCol}${row}`).dataValidation = {
-      type: 'list',
-      allowBlank: true,
-      formulae: [formula],
-      showInputMessage: true,
-      promptTitle: 'Select Account',
-      prompt: 'Click the dropdown arrow to choose a contribution account. The code before the dash will be used.',
+    // Column H — account_code
+    ws.getCell(`H${row}`).dataValidation = {
+      type: 'list', allowBlank: true, formulae: [formula],
+      showInputMessage: true, promptTitle: 'Select Account',
+      prompt: 'Choose the offering type. The code before the dash is used for posting.',
+      showErrorMessage: false,
+    };
+    // Column J — description (same list so users can pick offering name here too)
+    ws.getCell(`J${row}`).dataValidation = {
+      type: 'list', allowBlank: true, formulae: [formula],
+      showInputMessage: true, promptTitle: 'Select Offering Type',
+      prompt: 'Choose the offering type from the list.',
       showErrorMessage: false,
     };
   }
