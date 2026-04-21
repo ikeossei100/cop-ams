@@ -1825,6 +1825,7 @@ function startApp() {
   const ym = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
   ['contrib-month','jnl-month','bankrec-period'].forEach(id => { const el=document.getElementById(id); if(el) el.value=ym; });
   initCOACache();
+  refreshBankAcctDropdowns();
   showScreen('dashboard');
   loadDashboard();
   // Check auto backup after a short delay to let the app settle
@@ -1900,6 +1901,29 @@ async function logAction(action, tableName, recordId, oldVal, newVal) {
 // HELPERS
 // ══════════════════════════════════════════════
 function fmt(n) { return '$' + (parseFloat(n)||0).toLocaleString('en-CA',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+
+// Bank account display labels — admin sees bank-specific names; districts see generic names
+const _bankLabelsAdmin   = { '1110':'Scotia Bank – General A/C', '1113':'Scotia – US Exchange Fund', '1115':'Head Office Savings A/C', '1121':'Scotia – Missions', '1091':'Cash at Hand', '1092':'Petty Cash' };
+const _bankLabelsGeneric = { '1110':'General Account',           '1113':'US Exchange Fund',          '1115':'Savings Account',         '1121':'Missions Account',  '1091':'Cash at Hand', '1092':'Petty Cash' };
+function bankAcctLabel(code) {
+  const map = currentProfile?.role === 'admin' ? _bankLabelsAdmin : _bankLabelsGeneric;
+  return map[code] || code;
+}
+function bankAcctOptions(selectedCode) {
+  return ['1110','1113','1115','1121','1091','1092'].map(c =>
+    `<option value="${c}" ${c===(selectedCode||'1110')?'selected':''}>${c} – ${bankAcctLabel(c)}</option>`
+  ).join('');
+}
+// Re-render all static bank account dropdowns after login (role is now known)
+function refreshBankAcctDropdowns() {
+  ['bankrec-account','imp-bank-account'].forEach(id => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    const cur = sel.value;
+    sel.innerHTML = bankAcctOptions(cur);
+  });
+}
+
 // Returns user ID only if a real profile row exists in DB (avoids FK violations)
 function myId() { return currentProfile?._no_profile_row ? null : (currentUser?.id || null); }
 // Apply district-based data isolation to any Supabase query builder.
@@ -2836,12 +2860,7 @@ async function openContribForm(id) {
     <div>
       <label class="form-label">Received Into (Bank / Cash Account) *</label>
       <select id="cf-bank-acct" class="form-input">
-        <option value="1110" ${(c?.bank_account_code||'1110')==='1110'?'selected':''}>1110 – Scotia Bank – General A/C</option>
-        <option value="1113" ${c?.bank_account_code==='1113'?'selected':''}>1113 – Scotia – US Exchange Fund</option>
-        <option value="1115" ${c?.bank_account_code==='1115'?'selected':''}>1115 – Head Office Savings A/C</option>
-        <option value="1121" ${c?.bank_account_code==='1121'?'selected':''}>1121 – Scotia – Missions</option>
-        <option value="1091" ${c?.bank_account_code==='1091'?'selected':''}>1091 – Cash at Hand</option>
-        <option value="1092" ${c?.bank_account_code==='1092'?'selected':''}>1092 – Petty Cash</option>
+        ${bankAcctOptions(c?.bank_account_code||'1110')}
       </select>
     </div>
     <div><label class="form-label">Description</label><input id="cf-desc" class="form-input" value="${c?.description||''}" placeholder="e.g. Sunday Service Offering"></div>
@@ -7926,11 +7945,7 @@ async function loadImportedRecords() {
     return;
   }
 
-  const bankAcctLabels = {
-    '1110':'Scotia Bank – General A/C','1113':'Scotia – US Exchange Fund',
-    '1115':'Head Office Savings A/C','1121':'Scotia – Missions',
-    '1091':'Cash at Hand','1092':'Petty Cash'
-  };
+  const bankAcctLabels = currentProfile?.role === 'admin' ? _bankLabelsAdmin : _bankLabelsGeneric;
 
   let html = `<table class="tbl text-xs mb-4">
     <thead><tr><th>Type</th><th>Date</th><th>Description</th><th class="text-right">Debit</th><th class="text-right">Credit</th><th>Status</th><th>Actions</th></tr></thead><tbody>`;
@@ -8100,12 +8115,7 @@ async function editImportedBankRec(id) {
         <div>
           <label class="form-label">Bank Account</label>
           <select id="ebr-account" class="form-input">
-            <option value="1110" ${data.bank_account==='1110'?'selected':''}>1110 – Scotia Bank – General A/C</option>
-            <option value="1113" ${data.bank_account==='1113'?'selected':''}>1113 – Scotia – US Exchange Fund</option>
-            <option value="1115" ${data.bank_account==='1115'?'selected':''}>1115 – Head Office Savings A/C</option>
-            <option value="1121" ${data.bank_account==='1121'?'selected':''}>1121 – Scotia – Missions</option>
-            <option value="1091" ${data.bank_account==='1091'?'selected':''}>1091 – Cash at Hand</option>
-            <option value="1092" ${data.bank_account==='1092'?'selected':''}>1092 – Petty Cash</option>
+            ${bankAcctOptions(data.bank_account||'1110')}
           </select>
         </div>
         <div><label class="form-label">Reconciliation Date</label><input type="date" id="ebr-date" class="form-input" value="${data.period_date}"></div>
