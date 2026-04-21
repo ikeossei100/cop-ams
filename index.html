@@ -2897,6 +2897,7 @@ function cfFillFromLookup(encoded) {
     set('cf-cphone',   r.contributor_phone);
     set('cf-cemail',   r.contributor_email);
     set('cf-caddress', r.contributor_address);
+    set('cf-dist',     r.district);
     const res = document.getElementById('cf-lookup-results');
     if (res) res.style.display = 'none';
     const inp = document.getElementById('cf-lookup');
