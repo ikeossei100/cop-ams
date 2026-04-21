@@ -2887,13 +2887,19 @@ async function cfLookupSearch(query) {
   if (!el) return;
   if (query.length < 2) { el.style.display = 'none'; return; }
 
-  // Search by name OR envelope number across all districts
-  const { data } = await sb.from('contributions')
+  // Build query — scope to signed-in user's district for non-admin users
+  let q = sb.from('contributions')
     .select('contributor_name,envelope_number,contributor_phone,contributor_email,contributor_address,district')
     .or(`contributor_name.ilike.%${query}%,envelope_number.ilike.%${query}%`)
     .not('contributor_name', 'is', null)
     .order('contributor_name')
     .limit(50);
+
+  const role = currentProfile?.role;
+  const district = currentProfile?.district;
+  if (role !== 'admin' && district) q = q.eq('district', district);
+
+  const { data } = await q;
 
   // Deduplicate: prefer records with envelope number, keep most complete record per contributor
   const map = {};
