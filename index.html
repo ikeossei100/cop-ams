@@ -2728,6 +2728,14 @@ async function openContribForm(id) {
   })();
   const canPost = ['admin','accountant'].includes(currentProfile?.role);
   openModal(c?'Edit Contribution':'New Contribution', `<div class="space-y-3">
+    ${!c ? `
+    <!-- Contributor lookup (new entries only) -->
+    <div style="background:#f0f9ff;border:1.5px solid #bfdbfe;border-radius:8px;padding:10px 12px;position:relative;">
+      <label class="form-label" style="color:#1e40af;margin-bottom:4px;display:block;">Search Existing Contributor</label>
+      <input id="cf-lookup" class="form-input" placeholder="Type name or envelope number…" autocomplete="off"
+             oninput="cfLookupDebounce(this.value)" onblur="setTimeout(()=>{ const el=document.getElementById('cf-lookup-results'); if(el) el.style.display='none'; },200)">
+      <div id="cf-lookup-results" style="display:none;position:absolute;left:12px;right:12px;top:100%;background:white;border:1.5px solid #bfdbfe;border-radius:0 0 8px 8px;box-shadow:0 4px 12px rgba(0,0,0,0.1);z-index:9999;max-height:220px;overflow-y:auto;"></div>
+    </div>` : ''}
     <div class="border-b pb-2 mb-1"><p class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Contributor Details</p></div>
     <div class="grid grid-cols-3 gap-3">
       <div class="col-span-2"><label class="form-label">Full Name</label><input id="cf-cname" class="form-input" value="${c?.contributor_name||''}" placeholder="e.g. John Mensah"></div>
@@ -2829,6 +2837,75 @@ function toggleContribDistrictPicker() {
   const picker = document.getElementById('cf-district-picker');
   if (picker) picker.style.display = acct === '4020' ? 'block' : 'none';
 }
+
+// ── Contributor Lookup (auto-fill from past contributions) ──────────────
+let _cfLookupTimer = null;
+function cfLookupDebounce(val) {
+  clearTimeout(_cfLookupTimer);
+  _cfLookupTimer = setTimeout(() => cfLookupSearch(val.trim()), 320);
+}
+
+async function cfLookupSearch(query) {
+  const el = document.getElementById('cf-lookup-results');
+  if (!el) return;
+  if (query.length < 2) { el.style.display = 'none'; return; }
+
+  // Search by name OR envelope number across all districts
+  const { data } = await sb.from('contributions')
+    .select('contributor_name,envelope_number,contributor_phone,contributor_email,contributor_address,district')
+    .or(`contributor_name.ilike.%${query}%,envelope_number.ilike.%${query}%`)
+    .not('contributor_name', 'is', null)
+    .order('contributor_name')
+    .limit(50);
+
+  // Deduplicate: prefer records with envelope number, keep most complete record per contributor
+  const map = {};
+  (data || []).forEach(r => {
+    const key = (r.envelope_number || r.contributor_name || '').toLowerCase();
+    const existing = map[key];
+    if (!existing || (!existing.contributor_phone && r.contributor_phone) ||
+        (!existing.contributor_address && r.contributor_address)) {
+      map[key] = r;
+    }
+  });
+  const unique = Object.values(map).slice(0, 15);
+
+  if (!unique.length) {
+    el.innerHTML = '<div style="padding:10px 12px;font-size:12px;color:#9ca3af;">No matching contributor found.</div>';
+    el.style.display = 'block'; return;
+  }
+
+  el.innerHTML = unique.map(r => {
+    const safe = encodeURIComponent(JSON.stringify(r));
+    const sub = [r.envelope_number ? 'Env: ' + r.envelope_number : '', r.district || ''].filter(Boolean).join(' · ');
+    return `<div onmousedown="cfFillFromLookup('${safe}')"
+      style="padding:9px 12px;cursor:pointer;border-bottom:1px solid #f3f4f6;"
+      onmouseover="this.style.background='#eff6ff'" onmouseout="this.style.background='white'">
+      <div style="font-weight:600;font-size:13px;color:#111827;">${r.contributor_name}</div>
+      ${sub ? `<div style="font-size:11px;color:#6b7280;margin-top:1px;">${sub}</div>` : ''}
+    </div>`;
+  }).join('');
+  el.style.display = 'block';
+}
+
+function cfFillFromLookup(encoded) {
+  try {
+    const r = JSON.parse(decodeURIComponent(encoded));
+    const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val || ''; };
+    set('cf-cname',    r.contributor_name);
+    set('cf-envelope', r.envelope_number);
+    set('cf-cphone',   r.contributor_phone);
+    set('cf-cemail',   r.contributor_email);
+    set('cf-caddress', r.contributor_address);
+    const res = document.getElementById('cf-lookup-results');
+    if (res) res.style.display = 'none';
+    const inp = document.getElementById('cf-lookup');
+    if (inp) inp.value = '';
+    // Focus the next important field
+    document.getElementById('cf-cname')?.focus();
+  } catch(e) { console.warn('Contributor fill error', e); }
+}
+// ────────────────────────────────────────────────────────────────────────
 
 function syncContribDate() {
   const yr  = document.getElementById('cf-year')?.value;
