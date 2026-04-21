@@ -463,12 +463,12 @@ tailwind.config = {
       <div class="stat-card">
         <div class="text-xs text-gray-500 uppercase tracking-wide mb-1" id="dash-income-label">Income — Posted</div>
         <div class="text-xl font-bold text-gray-800" id="dash-income">$0.00</div>
-        <div class="text-xs text-gray-400 mt-0.5">All districts · confirmed</div>
+        <div class="text-xs text-gray-400 mt-0.5" id="dash-income-scope">All districts · confirmed</div>
       </div>
       <div class="stat-card" style="border-left-color:#f59e0b;">
         <div class="text-xs text-gray-500 uppercase tracking-wide mb-1" id="dash-draft-income-label">Income — Drafts</div>
         <div class="text-xl font-bold" style="color:#b45309;" id="dash-draft-income">$0.00</div>
-        <div class="text-xs mt-0.5" style="color:#d97706;">All districts · pending post</div>
+        <div class="text-xs mt-0.5" style="color:#d97706;" id="dash-draft-income-scope">All districts · pending post</div>
       </div>
       <div class="stat-card" style="border-left-color:#d4a800;">
         <div class="text-xs text-gray-500 uppercase tracking-wide mb-1" id="dash-expense-label">Expenses (YTD)</div>
@@ -487,7 +487,7 @@ tailwind.config = {
       <div class="md:col-span-3 rounded-xl px-4 py-3 flex items-center gap-4" style="background:#fffbeb;border:1.5px solid #f59e0b;">
         <span style="font-size:1.4rem;">⏳</span>
         <div class="flex-1">
-          <div class="text-xs font-bold uppercase tracking-wide" style="color:#b45309;">Unposted Draft Contributions — All Districts</div>
+          <div class="text-xs font-bold uppercase tracking-wide" id="dash-draft-banner-label" style="color:#b45309;">Unposted Draft Contributions — All Districts</div>
           <div class="text-xs mt-0.5" style="color:#d97706;">These amounts are not yet confirmed. Post them to include in official figures.</div>
         </div>
         <div class="text-right">
@@ -496,6 +496,19 @@ tailwind.config = {
         </div>
       </div>
     </div>
+    <!-- Draft Journals Banner -->
+    <div class="rounded-xl px-4 py-3 flex items-center gap-4 mb-6" style="background:#f0fdf4;border:1.5px solid #86efac;">
+      <span style="font-size:1.4rem;">📋</span>
+      <div class="flex-1">
+        <div class="text-xs font-bold uppercase tracking-wide" id="dash-draft-jnl-banner-label" style="color:#15803d;">Unposted Draft Journal Entries</div>
+        <div class="text-xs mt-0.5" style="color:#16a34a;">All pending unposted journal entries — any date. Post them to include in official figures.</div>
+      </div>
+      <div class="text-right">
+        <div class="font-bold" style="font-size:1.1rem;color:#15803d;" id="dash-draft-jnl-total">$0.00</div>
+        <div class="text-xs" style="color:#16a34a;" id="dash-draft-jnl-count">0 entries</div>
+      </div>
+    </div>
+
     <div class="grid md:grid-cols-2 gap-4">
       <div class="card p-4">
         <div class="flex items-center justify-between mb-3">
@@ -777,6 +790,29 @@ tailwind.config = {
       <button class="btn-primary text-xs role-entry-only" onclick="openJournalForm()">+ New Journal</button>
     </div>
   </div>
+  <!-- Draft entries panel — always visible when drafts exist for the month -->
+  <div id="jnl-draft-panel" style="display:none;" class="mb-4 rounded-xl overflow-hidden" style="border:1.5px solid #86efac;">
+    <div class="flex items-center justify-between px-4 py-2.5 flex-wrap gap-2" style="background:#f0fdf4;border-bottom:1.5px solid #bbf7d0;">
+      <div class="flex items-center gap-2">
+        <span style="font-size:1.1rem;">📋</span>
+        <span class="text-xs font-bold uppercase tracking-wide" style="color:#15803d;">Unposted Draft Entries —</span>
+        <span class="text-xs font-bold" style="color:#15803d;" id="jnl-draft-month-label"></span>
+        <span class="ml-1 text-xs px-2 py-0.5 rounded-full font-bold" style="background:#dcfce7;color:#15803d;" id="jnl-draft-count-badge">0</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="text-xs font-semibold" style="color:#15803d;" id="jnl-draft-total-label">$0.00 total debits</span>
+        <button onclick="jnlFilterDrafts()" class="btn-secondary text-xs">Filter table to drafts</button>
+        <button onclick="jnlShowAll()" class="btn-secondary text-xs">Show all</button>
+      </div>
+    </div>
+    <div class="overflow-x-auto" style="background:#fff;">
+      <table class="tbl">
+        <thead><tr><th>Date</th><th>Ref#</th><th>Type</th><th>Description</th><th class="text-right">Debit</th><th class="text-right">Credit</th><th>Actions</th></tr></thead>
+        <tbody id="jnl-draft-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
   <div class="card overflow-hidden">
     <table class="tbl">
       <thead><tr><th>Date</th><th>Ref#</th><th>Type</th><th>Description</th><th>Debit</th><th>Credit</th><th>Status</th><th>Actions</th></tr></thead>
@@ -2570,7 +2606,8 @@ async function loadContributions() {
   const statusFilter = document.getElementById('contrib-filter-status')?.value;
   if (!month) return;
   const [yr,mo] = month.split('-');
-  const from = `${yr}-${mo}-01`, to = `${yr}-${mo}-31`;
+  const lastDay=new Date(parseInt(yr),parseInt(mo),0).getDate();
+  const from = `${yr}-${mo}-01`, to = `${yr}-${mo}-${String(lastDay).padStart(2,'0')}`;
   let q = withUser(sb.from('contributions').select('*').gte('date',from).lte('date',to).order('date'));
   if (statusFilter) q = q.eq('status',statusFilter);
   const {data,error} = await q;
@@ -3433,7 +3470,7 @@ async function createContribJournal(contrib) {
     total_credit: amount,
     posted_at: new Date().toISOString(),
     posted_by: myId(),
-    entered_by: myId()
+    entered_by: myId(),
   };
   const { data, error } = await sb.from('journals').insert(jnlPayload).select('id').single();
   if (error) { console.warn('Journal create error:', error.message); return null; }
@@ -3546,14 +3583,75 @@ async function loadJournals() {
   const statusF=document.getElementById('jnl-filter-status')?.value;
   if (!month) return;
   const [yr,mo]=month.split('-');
-  const from=`${yr}-${mo}-01`,to=`${yr}-${mo}-31`;
+  const lastDay=new Date(parseInt(yr),parseInt(mo),0).getDate();
+  const from=`${yr}-${mo}-01`,to=`${yr}-${mo}-${String(lastDay).padStart(2,'0')}`;
+
+  // Main table query (respects all filters)
   let q=withUser(sb.from('journals').select('*').gte('date',from).lte('date',to).order('date'));
   if (typeF) q=q.eq('type',typeF);
   if (statusF) q=q.eq('status',statusF);
-  const {data,error}=await q;
+
+  // Draft-only query — always fetches drafts for the panel regardless of status filter
+  let dq=dashDraftJournalFilter(sb.from('journals').select('*').eq('status','draft').gte('date',from).lte('date',to).order('date'));
+  if (typeF) dq=dq.eq('type',typeF);
+
+  const [{data,error},{data:draftData}] = await Promise.all([q, dq]);
   if (error) { toast('Failed to load journals: '+error.message,'error'); return; }
   journalData=data||[];
   renderJournals();
+  renderJournalDraftPanel(draftData||[], month);
+}
+
+function renderJournalDraftPanel(drafts, month) {
+  const panel = document.getElementById('jnl-draft-panel');
+  if (!panel) return;
+  const role = currentProfile?.role || 'viewer';
+  const canPost = ['admin','accountant'].includes(role);
+  const canEnter = canPost || role === 'dataentry';
+
+  if (drafts.length === 0) { panel.style.display = 'none'; return; }
+  panel.style.display = 'block';
+
+  // Month label
+  const [yr,mo] = month.split('-');
+  const monthLabel = new Date(parseInt(yr), parseInt(mo)-1, 1).toLocaleString('en-CA',{month:'long',year:'numeric'});
+  const monthEl = document.getElementById('jnl-draft-month-label');
+  if (monthEl) monthEl.textContent = monthLabel;
+
+  // Count + total
+  const total = drafts.reduce((s,j)=>s+(parseFloat(j.total_debit)||0),0);
+  const countEl = document.getElementById('jnl-draft-count-badge');
+  if (countEl) countEl.textContent = `${drafts.length} entr${drafts.length===1?'y':'ies'}`;
+  const totalEl = document.getElementById('jnl-draft-total-label');
+  if (totalEl) totalEl.textContent = `${fmt(total)} total debits`;
+
+  // Rows
+  const rows = drafts.map(j=>`<tr style="background:#fafff8;">
+    <td>${j.date}</td>
+    <td>${j.ref_no||'—'}</td>
+    <td><span class="text-xs font-mono bg-gray-100 px-1 rounded">${j.type}</span></td>
+    <td class="max-w-xs truncate">${j.description}</td>
+    <td class="text-right">${fmt(j.total_debit)}</td>
+    <td class="text-right">${fmt(j.total_credit)}</td>
+    <td class="flex gap-1 text-xs flex-wrap">
+      <button class="text-blue-600 hover:underline" onclick="viewJournal('${j.id}')">View</button>
+      ${canEnter?`<button class="text-indigo-600 hover:underline" onclick="openJournalForm('${j.id}')">Edit</button>`:''}
+      ${canPost?`<button class="text-green-600 hover:underline font-semibold" onclick="postJournal('${j.id}')">Post</button>`:''}
+    </td>
+  </tr>`).join('');
+  const tbody = document.getElementById('jnl-draft-tbody');
+  if (tbody) tbody.innerHTML = rows;
+}
+
+function jnlFilterDrafts() {
+  const sel = document.getElementById('jnl-filter-status');
+  if (sel) sel.value = 'draft';
+  loadJournals();
+}
+function jnlShowAll() {
+  const sel = document.getElementById('jnl-filter-status');
+  if (sel) sel.value = '';
+  loadJournals();
 }
 
 function renderJournals() {
@@ -4072,7 +4170,8 @@ async function loadBankRec() {
   const stmtBal=parseFloat(document.getElementById('bankrec-stmt-bal').value)||0;
   if(!period){toast('Select a period first.','error');return;}
   const [yr,mo]=period.split('-');
-  const from=`${yr}-${mo}-01`,to=`${yr}-${mo}-31`;
+  const lastDay=new Date(parseInt(yr),parseInt(mo),0).getDate();
+  const from=`${yr}-${mo}-01`,to=`${yr}-${mo}-${String(lastDay).padStart(2,'0')}`;
   const {data:journals}=await withUser(sb.from('journals').select('*').eq('status','posted').gte('date',from).lte('date',to));
   const cashCodes=['1091','1092','1110','1113','1115','1121'];
   bankRecItems=[];
@@ -4447,6 +4546,15 @@ function dashContribFilter(q) {
   return withUser(q); // no district on profile — fall back to entered_by
 }
 function dashJournalFilter(q) {
+  if (currentProfile?.role === 'admin') return q;
+  return withUser(q);
+}
+// For draft journals on dashboard — uses district column (set on new entries)
+// with entered_by fallback for older entries that pre-date the district column
+function dashDraftJournalFilter(q) {
+  // Journals have no district column — scope by entered_by using _districtUids
+  // (all user IDs in the same district, loaded at login from profiles).
+  // Admin sees everything; district users see entries from anyone in their district.
   if (currentProfile?.role === 'admin') return q;
   return withUser(q);
 }
@@ -8843,19 +8951,26 @@ async function loadDashboard() {
 
   // Show district label for non-admin users
   const districtBannerEl = document.getElementById('dash-district-banner');
+  const _dbRole = currentProfile?.role;
+  const _dbDistrict = currentProfile?.district;
   if (districtBannerEl) {
-    const role = currentProfile?.role;
-    const district = currentProfile?.district;
-    if (role !== 'admin' && district) {
-      districtBannerEl.textContent = `Showing data for: ${district}`;
+    if (_dbRole !== 'admin' && _dbDistrict) {
+      districtBannerEl.textContent = `Showing data for: ${_dbDistrict}`;
       districtBannerEl.style.display = 'block';
-    } else if (role === 'admin') {
+    } else if (_dbRole === 'admin') {
       districtBannerEl.textContent = 'Showing data for: All Districts';
       districtBannerEl.style.display = 'block';
     } else {
       districtBannerEl.style.display = 'none';
     }
   }
+
+  // Update scope sublabels on stat cards and draft banner
+  const _scopeLabel = (_dbRole !== 'admin' && _dbDistrict) ? _dbDistrict : 'All Districts';
+  setLbl('dash-income-scope', `${_scopeLabel} · confirmed`);
+  setLbl('dash-draft-income-scope', `${_scopeLabel} · pending post`);
+  const draftBannerLbl = document.getElementById('dash-draft-banner-label');
+  if (draftBannerLbl) draftBannerLbl.textContent = `Unposted Draft Contributions — ${_scopeLabel}`;
 
   // Chart label & config
   const chartLabelEl = document.getElementById('dash-chart-label');
@@ -8866,16 +8981,19 @@ async function loadDashboard() {
     const chartFrom = `${navY}-01-01`;
     const chartTo   = viewMode==='year' ? `${navY}-12-31` : `${navY}-${navMStr}-${String(lastDayOfNavM).padStart(2,'0')}`;
     // Build district-filtered dashboard queries
-    const mkJnl   = async (f,t) => { let q=sb.from('journals').select('*').eq('status','posted').gte('date',f).lte('date',t); q=dashJournalFilter(q); const {data}=await q; return data||[]; };
-    const mkCon   = async (f,t) => { let q=sb.from('contributions').select('*').eq('status','posted').gte('date',f).lte('date',t); q=dashContribFilter(q); const {data}=await q; return data||[]; };
-    const mkDraft = async (f,t) => { let q=sb.from('contributions').select('id,amount,account_code,date,contributor_name,district').eq('status','draft').gte('date',f).lte('date',t); q=dashContribFilter(q); const {data}=await q; return data||[]; };
+    const mkJnl      = async (f,t) => { let q=sb.from('journals').select('*').eq('status','posted').gte('date',f).lte('date',t); q=dashJournalFilter(q); const {data}=await q; return data||[]; };
+    const mkCon      = async (f,t) => { let q=sb.from('contributions').select('*').eq('status','posted').gte('date',f).lte('date',t); q=dashContribFilter(q); const {data}=await q; return data||[]; };
+    const mkDraft    = async (f,t) => { let q=sb.from('contributions').select('id,amount,account_code,date,contributor_name,district').eq('status','draft').gte('date',f).lte('date',t); q=dashContribFilter(q); const {data}=await q; return data||[]; };
+    // Draft journals: fetch ALL pending drafts (no date filter) so nothing is hidden by period selector
+    const mkDraftJnl = async () => { let q=sb.from('journals').select('id,date,ref_no,description,total_debit,total_credit,entered_by').eq('status','draft').order('date',{ascending:false}); q=dashDraftJournalFilter(q); const {data}=await q; return data||[]; };
 
-    const [jnl, con, jnlStat, conStat, draftConStat] = await Promise.all([
+    const [jnl, con, jnlStat, conStat, draftConStat, draftJnlStat] = await Promise.all([
       mkJnl(chartFrom, chartTo),   // for yearly chart
       mkCon(chartFrom, chartTo),
       mkJnl(from, to),             // for stat cards
       mkCon(from, to),
-      mkDraft(from, to)
+      mkDraft(from, to),
+      mkDraftJnl()
     ]);
 
     // Stat card totals (use stat-range data)
@@ -8911,6 +9029,16 @@ async function loadDashboard() {
     if (draftContribEl) draftContribEl.textContent = fmt(draftTotal);
     const draftCountEl = document.getElementById('dash-draft-contrib-count');
     if (draftCountEl) draftCountEl.textContent = `${draftCount} entr${draftCount===1?'y':'ies'} pending`;
+
+    // Draft journals
+    const draftJnlTotal = draftJnlStat.reduce((s,j)=>s+(parseFloat(j.total_debit)||0),0);
+    const draftJnlCount = draftJnlStat.length;
+    const draftJnlTotalEl = document.getElementById('dash-draft-jnl-total');
+    if (draftJnlTotalEl) draftJnlTotalEl.textContent = fmt(draftJnlTotal);
+    const draftJnlCountEl = document.getElementById('dash-draft-jnl-count');
+    if (draftJnlCountEl) draftJnlCountEl.textContent = `${draftJnlCount} entr${draftJnlCount===1?'y':'ies'} pending`;
+    const draftJnlBannerLbl = document.getElementById('dash-draft-jnl-banner-label');
+    if (draftJnlBannerLbl) draftJnlBannerLbl.textContent = `Unposted Draft Journal Entries (All Dates) — ${_scopeLabel}`;
 
     // Build chart data
     if(dashChart) dashChart.destroy();
