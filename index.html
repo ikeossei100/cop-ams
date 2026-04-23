@@ -667,6 +667,7 @@ tailwind.config = {
     </div>
     <div class="flex gap-2 flex-wrap">
       <button class="btn-secondary text-xs" onclick="exportContribCSV()">Export CSV</button>
+      <button class="btn-secondary text-xs" onclick="exportContributorList()">Export Contributors</button>
       <button class="btn-secondary text-xs" onclick="downloadContribTemplate()">Download Template</button>
       <button class="btn-gold text-xs role-entry-only" onclick="openContribImport()">Import Excel</button>
       <button id="btn-post-selected" class="btn-primary text-xs role-accountant-only hidden" onclick="postSelectedContribs()">Post Selected</button>
@@ -3594,6 +3595,107 @@ function exportContribCSV() {
       a?`${c.account_code} – ${a.name}`:c.account_code,c.description||'',c.district||'',c.amount,c.status]);
   });
   downloadCSV(rows,'Contributions.csv');
+}
+
+async function exportContributorList() {
+  if (typeof ExcelJS === 'undefined') { toast('ExcelJS not loaded yet — try again in a moment.', 'error'); return; }
+  toast('Building contributor list…', 'info');
+
+  // Fetch all contributions with contributor details, scoped to district for non-admin
+  let q = sb.from('contributions')
+    .select('contributor_name,envelope_number,contributor_phone,contributor_email,contributor_address,district')
+    .not('contributor_name', 'is', null)
+    .neq('contributor_name', '')
+    .order('contributor_name');
+  const role = currentProfile?.role;
+  const district = currentProfile?.district;
+  if (role !== 'admin' && district) q = q.eq('district', district);
+
+  const { data, error } = await q;
+  if (error) { toast('Failed to load contributors: ' + error.message, 'error'); return; }
+
+  // Deduplicate — one row per unique contributor, keeping the most complete record
+  const map = {};
+  (data || []).forEach(r => {
+    const key = (r.envelope_number || r.contributor_name || '').trim().toLowerCase();
+    const ex = map[key];
+    if (!ex) { map[key] = { ...r }; return; }
+    // Merge: prefer whichever field has a value
+    if (!ex.envelope_number  && r.envelope_number)  ex.envelope_number  = r.envelope_number;
+    if (!ex.contributor_phone && r.contributor_phone) ex.contributor_phone = r.contributor_phone;
+    if (!ex.contributor_email && r.contributor_email) ex.contributor_email = r.contributor_email;
+    if (!ex.contributor_address && r.contributor_address) ex.contributor_address = r.contributor_address;
+    if (!ex.district && r.district) ex.district = r.district;
+  });
+  const contributors = Object.values(map).sort((a,b)=>(a.contributor_name||'').localeCompare(b.contributor_name||''));
+
+  if (!contributors.length) { toast('No contributors found.', 'error'); return; }
+
+  // Build Excel workbook
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'COP Accounting System';
+  wb.created = new Date();
+  const ws = wb.addWorksheet('Contributors');
+
+  // Header row
+  ws.columns = [
+    { header: 'Full Name',       key: 'name',    width: 28 },
+    { header: 'Envelope #',      key: 'env',     width: 14 },
+    { header: 'Phone',           key: 'phone',   width: 18 },
+    { header: 'Email',           key: 'email',   width: 30 },
+    { header: 'Address',         key: 'address', width: 36 },
+    { header: 'District',        key: 'district',width: 22 },
+  ];
+
+  // Style header
+  const headerRow = ws.getRow(1);
+  headerRow.eachCell(cell => {
+    cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+    cell.fill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1A3C8F' } };
+    cell.alignment = { vertical: 'middle', horizontal: 'left' };
+    cell.border = { bottom: { style: 'thin', color: { argb: 'FFAAAAAA' } } };
+  });
+  headerRow.height = 22;
+
+  // Title rows above header
+  ws.spliceRows(1, 0, ['Church of Pentecost Canada Inc — Contributor List'], ['']);
+  ws.getRow(1).getCell(1).font = { bold: true, size: 13, color: { argb: 'FF1A3C8F' } };
+  ws.getRow(2).getCell(1).value = `District: ${district || 'All Districts'} · Exported: ${new Date().toLocaleDateString('en-CA')}`;
+  ws.getRow(2).getCell(1).font  = { italic: true, size: 10, color: { argb: 'FF666666' } };
+  ws.getRow(3).height = 22; // header row (now row 3)
+
+  // Data rows
+  contributors.forEach((r, i) => {
+    const row = ws.addRow({
+      name:    r.contributor_name || '',
+      env:     r.envelope_number  || '',
+      phone:   r.contributor_phone || '',
+      email:   r.contributor_email || '',
+      address: r.contributor_address || '',
+      district:r.district || '',
+    });
+    if (i % 2 === 0) {
+      row.eachCell(cell => {
+        cell.fill = { type:'pattern', pattern:'solid', fgColor:{ argb:'FFF0F4FF' } };
+      });
+    }
+    row.eachCell(cell => { cell.alignment = { vertical:'middle' }; });
+  });
+
+  // Freeze header rows
+  ws.views = [{ state:'frozen', ySplit:3 }];
+
+  // Download
+  const buf = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  const districtSlug = (district || 'all-districts').toLowerCase().replace(/\s+/g,'-');
+  a.download = `COP-Contributors-${districtSlug}-${new Date().toISOString().slice(0,10)}.xlsx`;
+  a.click();
+  URL.revokeObjectURL(url);
+  toast(`Exported ${contributors.length} contributors.`, 'success');
 }
 
 // ══════════════════════════════════════════════
