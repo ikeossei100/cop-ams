@@ -2678,6 +2678,7 @@ function renderContributions() {
       <td class="flex gap-1 flex-wrap text-xs">
         ${c.status==='draft'&&canEnter?`<button class="text-blue-600 hover:underline" onclick="openContribForm('${c.id}')">Edit</button>`:''}
         ${c.status==='draft'&&canPost?`<button class="text-green-600 hover:underline" onclick="postContrib('${c.id}')">Post</button>`:''}
+        ${c.status==='draft'&&canEnter?`<button class="text-red-500 hover:underline font-semibold" onclick="deleteContrib('${c.id}')">Delete</button>`:''}
         ${c.status==='posted'&&canPost?`<button class="text-orange-500 hover:underline" onclick="editContribRefNo('${c.id}','${(c.ref_no||'').replace(/'/g,"\\'")}','${(c.envelope_number||'').replace(/'/g,"\\'")}')">Edit Ref#/Env</button>`:''}
         ${c.status==='posted'&&canPost?`<button class="text-red-500 hover:underline" onclick="reverseContrib('${c.id}')">Reverse</button>`:''}
         <button class="text-gray-500 hover:underline" onclick="viewContribDetail('${c.id}')">View</button>
@@ -2686,6 +2687,22 @@ function renderContributions() {
   }).join('');
   document.getElementById('contrib-tbody').innerHTML = rows||'<tr><td colspan="11" class="text-center py-8 text-gray-400">No contributions found.</td></tr>';
   document.getElementById('contrib-total').textContent = fmt(total);
+}
+
+async function deleteContrib(id) {
+  const c = contribData.find(x => x.id === id);
+  if (!c) return;
+  if (c.status !== 'draft') { toast('Only draft entries can be deleted.', 'error'); return; }
+
+  const label = [c.contributor_name, c.district, fmt(c.amount)].filter(Boolean).join(' · ');
+  if (!confirm(`Delete this draft entry?\n\n${label}\n\nThis cannot be undone.`)) return;
+
+  const { error } = await sb.from('contributions').delete().eq('id', id).eq('status', 'draft');
+  if (error) { toast('Delete failed: ' + error.message, 'error'); return; }
+
+  await logAction('DELETE', 'contributions', id, { contributor_name: c.contributor_name, amount: c.amount, district: c.district }, null);
+  toast('Draft entry deleted.', 'success');
+  await loadContributions();
 }
 
 function toggleSelectAllContribs(checked) {
