@@ -5450,10 +5450,13 @@ async function genNationalSummary(from, to) {
     }));
   }
 
-  // Draft account totals — use ALL draft contributions unfiltered by district
-  // (district field may not be set on non-tithes entries; tithes filtering is done via account_code)
+  // Draft account totals — apply same district filter as posted contributions
+  const filteredDraftContribs = districtSelected
+    ? draftContribs.filter(c => (c.district || '').trim().toLowerCase() === _rptUserFilter.trim().toLowerCase())
+    : draftContribs;
+
   const draftAccountTotals = {};
-  draftContribs.forEach(c => {
+  filteredDraftContribs.forEach(c => {
     const amt = parseFloat(c.amount) || 0;
     draftAccountTotals[c.account_code] = (draftAccountTotals[c.account_code]||0) + amt;
   });
@@ -5475,9 +5478,9 @@ async function genNationalSummary(from, to) {
     }
   });
 
-  // Draft tithes per-district totals — built from ALL drafts, filtered during display
+  // Draft tithes per-district totals — apply same district filter
   const draftDistrictCodeTotals = {};
-  draftContribs.forEach(c => {
+  filteredDraftContribs.forEach(c => {
     const amt = parseFloat(c.amount) || 0;
     if (!tithesAllCodes.has(c.account_code)) return;
     if (c.account_code === '4020') {
