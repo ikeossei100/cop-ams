@@ -6,6 +6,22 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
+<script>
+// Auto cache-bust: if deployed version changed, force fresh load from server
+(function(){
+  var V='20260427-5';
+  var k='cop_ams_ver';
+  var stored=localStorage.getItem(k);
+  if(stored!==V){
+    localStorage.setItem(k,V);
+    if(stored){
+      // Version mismatch — reload with cache-busting query param so browser fetches fresh
+      var fresh=location.protocol+'//'+location.host+location.pathname+'?v='+V;
+      location.replace(fresh);
+    }
+  }
+})();
+</script>
 <title>COP AMS — Church of Pentecost Accounting</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.50.0/dist/umd/supabase.min.js"></script>
