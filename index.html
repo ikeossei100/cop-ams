@@ -2679,6 +2679,7 @@ function renderContributions() {
         ${c.status==='draft'&&canEnter?`<button class="text-blue-600 hover:underline" onclick="openContribForm('${c.id}')">Edit</button>`:''}
         ${c.status==='draft'&&canPost?`<button class="text-green-600 hover:underline" onclick="postContrib('${c.id}')">Post</button>`:''}
         ${c.status==='draft'&&canEnter?`<button class="text-red-500 hover:underline font-semibold" onclick="deleteContrib('${c.id}')">Delete</button>`:''}
+        ${canEnter?`<button class="text-indigo-600 hover:underline" onclick="editContribInfo('${c.id}')">Edit Info</button>`:''}
         ${c.status==='posted'&&canPost?`<button class="text-orange-500 hover:underline" onclick="editContribRefNo('${c.id}','${(c.ref_no||'').replace(/'/g,"\\'")}','${(c.envelope_number||'').replace(/'/g,"\\'")}')">Edit Ref#/Env</button>`:''}
         ${c.status==='posted'&&canPost?`<button class="text-red-500 hover:underline" onclick="reverseContrib('${c.id}')">Reverse</button>`:''}
         <button class="text-gray-500 hover:underline" onclick="viewContribDetail('${c.id}')">View</button>
@@ -2702,6 +2703,65 @@ async function deleteContrib(id) {
 
   await logAction('DELETE', 'contributions', id, { contributor_name: c.contributor_name, amount: c.amount, district: c.district }, null);
   toast('Draft entry deleted.', 'success');
+  await loadContributions();
+}
+
+function editContribInfo(id) {
+  const c = contribData.find(x => x.id === id);
+  if (!c) return;
+  openModal('Edit Contributor Information',
+    `<div class="space-y-3">
+      <p class="text-xs text-gray-500">Update contributor details only. Amount, account and date are not changed here.</p>
+      <div>
+        <label class="form-label">Full Name *</label>
+        <input id="eci-name" class="form-input" value="${(c.contributor_name||'').replace(/"/g,'&quot;')}" placeholder="Contributor full name">
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="form-label">Envelope #</label>
+          <input id="eci-envelope" class="form-input" value="${c.envelope_number||''}" placeholder="e.g. 0042">
+        </div>
+        <div>
+          <label class="form-label">Phone</label>
+          <input id="eci-phone" class="form-input" value="${c.contributor_phone||''}" placeholder="e.g. 416-555-0100">
+        </div>
+      </div>
+      <div>
+        <label class="form-label">Email</label>
+        <input id="eci-email" class="form-input" type="email" value="${c.contributor_email||''}" placeholder="email@example.com">
+      </div>
+      <div>
+        <label class="form-label">Address</label>
+        <input id="eci-address" class="form-input" value="${(c.contributor_address||'').replace(/"/g,'&quot;')}" placeholder="Street, City, Province">
+      </div>
+    </div>`,
+    `<button class="btn-secondary" onclick="closeModal()">Cancel</button>
+     <button class="btn-primary" onclick="saveContribInfo('${id}')">Save Changes</button>`
+  );
+}
+
+async function saveContribInfo(id) {
+  const name = document.getElementById('eci-name')?.value.trim();
+  if (!name) { toast('Full name is required.', 'error'); return; }
+
+  const updates = {
+    contributor_name:    name,
+    envelope_number:     document.getElementById('eci-envelope')?.value.trim() || null,
+    contributor_phone:   document.getElementById('eci-phone')?.value.trim()    || null,
+    contributor_email:   document.getElementById('eci-email')?.value.trim()    || null,
+    contributor_address: document.getElementById('eci-address')?.value.trim()  || null,
+  };
+
+  const old = contribData.find(x => x.id === id);
+  const { error } = await sb.from('contributions').update(updates).eq('id', id);
+  if (error) { toast('Save failed: ' + error.message, 'error'); return; }
+
+  await logAction('UPDATE', 'contributions', id,
+    { contributor_name: old?.contributor_name, envelope_number: old?.envelope_number },
+    { contributor_name: updates.contributor_name, envelope_number: updates.envelope_number }
+  );
+  toast('Contributor information updated.', 'success');
+  closeModal();
   await loadContributions();
 }
 
