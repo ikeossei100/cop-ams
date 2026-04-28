@@ -1568,17 +1568,8 @@ async function authLogin() {
       return;
     }
     clearAttempts(email);
-    currentUser = data.user;
-    try { await loadProfile(); } catch(pe) { console.warn('Profile load error:', pe); }
-    // Block only if is_approved is explicitly false AND not admin
-    if (currentProfile?.is_approved === false && currentProfile?.role !== 'admin') {
-      await sb.auth.signOut();
-      currentUser = null; currentProfile = null; _districtUids = null;
-      errEl.textContent = 'Your account is pending approval by an administrator. Please check back later.';
-      errEl.classList.remove('hidden');
-      return;
-    }
-    startApp();
+    // onAuthStateChange will fire SIGNED_IN and handle loadProfile() + startApp()
+    // Nothing else needed here — the auth state listener takes over.
   } catch(e) {
     let msg = e?.message || String(e);
     if (msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('network')) {
@@ -1693,9 +1684,20 @@ async function authRegister() {
 
 let _districtUids = null; // array of user IDs in the same district as current user (null = not loaded)
 
+// Robust profile loader with retry — handles cases where JWT hasn't propagated yet
+// (common on first login from a new computer / browser)
 async function loadProfile() {
-  const { data } = await sb.from('profiles').select('*').eq('id', currentUser.id).single();
+  let data = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const res = await sb.from('profiles').select('*').eq('id', currentUser.id).single();
+      if (res.data) { data = res.data; break; }
+    } catch(e) { /* retry */ }
+    if (attempt < 2) await new Promise(r => setTimeout(r, 700 * (attempt + 1)));
+  }
+
   if (!data) {
+    // No profile row found — treat as unconfigured admin (first-run scenario)
     currentProfile = {
       id: currentUser.id,
       full_name: currentUser.email,
@@ -1706,8 +1708,6 @@ async function loadProfile() {
     _districtUids = null;
   } else {
     currentProfile = data;
-    // Load all user IDs that belong to the same district so data can be segmented by district.
-    // Admins skip this — they see everything.
     if (data.role !== 'admin' && data.district) {
       const { data: peers } = await sb.from('profiles')
         .select('id')
@@ -1715,7 +1715,7 @@ async function loadProfile() {
         .eq('is_active', true);
       _districtUids = (peers || []).map(p => p.id);
     } else {
-      _districtUids = null; // admin or no district set
+      _districtUids = null;
     }
   }
 }
@@ -1780,29 +1780,10 @@ setInterval(async () => {
   if (!session && currentUser) authLogout();
 }, 5 * 60 * 1000);
 
+// checkSession is kept for password-recovery redirect detection only.
+// Normal session restore and login are handled by onAuthStateChange (set up in DOMContentLoaded).
 async function checkSession() {
-  try {
-    const { data: { session } } = await sb.auth.getSession();
-    if (session) {
-      currentUser = session.user;
-      try { await loadProfile(); } catch(pe) { console.warn('Profile load error in checkSession:', pe); }
-      // Block only if is_approved is explicitly false AND not admin
-      if (currentProfile?.is_approved === false && currentProfile?.role !== 'admin') {
-        await sb.auth.signOut();
-        currentUser = null; currentProfile = null; _districtUids = null;
-        const errEl = document.getElementById('auth-error');
-        if (errEl) {
-          errEl.textContent = 'Your account is pending approval by an administrator. Please check back later.';
-          errEl.classList.remove('hidden');
-        }
-        return;
-      }
-      startApp();
-    }
-  } catch(e) {
-    console.warn('checkSession error:', e);
-    // Don't block the login screen — just show it
-  }
+  // No-op — onAuthStateChange fires INITIAL_SESSION which handles restoring existing sessions.
 }
 
 function startApp() {
@@ -9335,11 +9316,33 @@ document.addEventListener('DOMContentLoaded', () => {
   // Detect Supabase password-recovery redirect (URL contains #access_token + type=recovery)
   const hash = window.location.hash;
   if (hash.includes('type=recovery') && hash.includes('access_token')) {
-    // Supabase has already set the session from the URL fragment — show set-new-password UI
     showSetNewPasswordPanel();
-  } else {
-    checkSession();
+    return;
   }
+
+  // onAuthStateChange is the reliable entry point for all sign-in scenarios:
+  // fresh login, restored session on a new computer, token refresh, sign-out.
+  // This guarantees the JWT is fully established before loadProfile() runs.
+  let _appStarted = false;
+  sb.auth.onAuthStateChange(async (event, session) => {
+    if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session) {
+      if (_appStarted) return; // already running — token refresh, ignore
+      _appStarted = true;
+      currentUser = session.user;
+      await loadProfile();
+      // Block unapproved non-admin users
+      if (currentProfile?.is_approved === false && currentProfile?.role !== 'admin') {
+        await sb.auth.signOut();
+        currentUser = null; currentProfile = null; _districtUids = null; _appStarted = false;
+        const errEl = document.getElementById('auth-error');
+        if (errEl) { errEl.textContent = 'Your account is pending approval by an administrator.'; errEl.classList.remove('hidden'); }
+        return;
+      }
+      startApp();
+    } else if (event === 'SIGNED_OUT') {
+      _appStarted = false;
+    }
+  });
 });
 
 function showSetNewPasswordPanel() {
