@@ -8721,23 +8721,13 @@ async function saveNewUser() {
   // Check username is not already taken
   const { data: existing } = await sb.from('profiles').select('id').ilike('username', username).maybeSingle();
   if (existing) { toast(`Username "${username}" is already taken. Choose a different one.`,'error'); return; }
-  // Create the Supabase Auth account
-  const { data: authData, error: authErr } = await sb.auth.admin
-    ? await sb.auth.admin.createUser({ email: auth_email, password, email_confirm: true })
-    : { data: null, error: { message: 'Admin API not available from client' } };
-  // If admin API is not available, fall back to signUp (needs email confirmation disabled)
-  let userId;
-  if (authErr || !authData?.user) {
-    // Fallback: use regular signUp — works when "Confirm email" is disabled in Supabase
-    const { data: su, error: suErr } = await sb.auth.signUp({ email: auth_email, password });
-    if (suErr || !su?.user) {
-      toast('Failed to create auth account: ' + (suErr?.message || authErr?.message || 'Unknown error') + '. Make sure "Confirm email" is disabled in Supabase Auth settings.','error');
-      return;
-    }
-    userId = su.user.id;
-  } else {
-    userId = authData.user.id;
+  // Create the Supabase Auth account via signUp (requires "Confirm email" disabled in Supabase Auth settings)
+  const { data: su, error: suErr } = await sb.auth.signUp({ email: auth_email, password });
+  if (suErr || !su?.user) {
+    toast('Failed to create auth account: ' + (suErr?.message || 'Unknown error') + '. Make sure "Confirm email" is disabled in Supabase Auth → Settings.','error');
+    return;
   }
+  const userId = su.user.id;
   // Insert profile row
   const { error: profErr } = await sb.from('profiles').insert({
     id: userId,
