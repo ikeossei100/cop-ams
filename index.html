@@ -9,7 +9,7 @@
 <script>
 // Auto cache-bust: if deployed version changed, force fresh load from server
 (function(){
-  var V='20260427-5';
+  var V='20260428-1';
   var k='cop_ams_ver';
   var stored=localStorage.getItem(k);
   if(stored!==V){
@@ -680,6 +680,7 @@ tailwind.config = {
         <option value="posted">Posted</option>
         <option value="reversed">Reversed</option>
       </select>
+      <input type="text" id="contrib-search" class="form-input" style="width:200px;" placeholder="🔍 Find by name, date, amount, ref#…" oninput="filterContribsInMemory()">
     </div>
     <div class="flex gap-2 flex-wrap">
       <button class="btn-secondary text-xs" onclick="exportContribCSV()">Export CSV</button>
@@ -800,6 +801,7 @@ tailwind.config = {
         <option value="posted">Posted</option>
         <option value="reversed">Reversed</option>
       </select>
+      <input type="text" id="jnl-search" class="form-input" style="width:200px;" placeholder="🔍 Find by description, date, ref#…" oninput="filterJnlsInMemory()">
     </div>
     <div class="flex gap-2">
       <button class="btn-gold text-xs" onclick="exportJnlPDF()">Export PDF</button>
@@ -2643,6 +2645,8 @@ async function exportAccountActivityPDF() {
 // CONTRIBUTIONS
 // ══════════════════════════════════════════════
 let contribData = [];
+let _visibleContribs = []; // IDs of currently displayed contributions (after search filter)
+let _contribSearchQ = '';  // current search query
 
 async function loadContributions() {
   const month = document.getElementById('contrib-month')?.value;
@@ -2656,6 +2660,13 @@ async function loadContributions() {
   const {data,error} = await q;
   if (error) { toast('Failed to load: '+error.message,'error'); return; }
   contribData = data||[];
+  _contribSearchQ = '';
+  const cs = document.getElementById('contrib-search'); if (cs) cs.value = '';
+  renderContributions();
+}
+
+function filterContribsInMemory() {
+  _contribSearchQ = (document.getElementById('contrib-search')?.value || '').toLowerCase().trim();
   renderContributions();
 }
 
@@ -2663,6 +2674,16 @@ function renderContributions() {
   const role = currentProfile?.role||'viewer';
   const canPost = ['admin','accountant'].includes(role);
   const canEnter = canPost || role==='dataentry';
+
+  // Apply in-memory search filter
+  const displayData = _contribSearchQ
+    ? contribData.filter(c => [c.contributor_name, c.date, String(c.amount), c.ref_no, c.envelope_number, c.description, c.district]
+        .some(v => (v||'').toLowerCase().includes(_contribSearchQ)))
+    : contribData;
+
+  // Track visible IDs for Prev/Next navigation
+  _visibleContribs = displayData.map(c => c.id);
+
   const hasDrafts = canPost && contribData.some(c => c.status === 'draft');
 
   // Show/hide bulk controls
@@ -2672,7 +2693,7 @@ function renderContributions() {
   if (document.getElementById('contrib-selected-count')) document.getElementById('contrib-selected-count').textContent = '0 selected';
 
   let total = 0;
-  const rows = contribData.map(c => {
+  const rows = displayData.map(c => {
     total += parseFloat(c.amount)||0;
     const acct = coaCache.find(a=>a.code===c.account_code);
     const acctName = acct?`${c.account_code} – ${acct.name}`:c.account_code||'';
@@ -2966,9 +2987,22 @@ async function openContribForm(id) {
     </div>
     <div><label class="form-label">Notes</label><textarea id="cf-notes" class="form-input" rows="2" placeholder="Optional notes">${c?.notes||''}</textarea></div>
   </div>`,
-  `<button class="btn-secondary" onclick="closeModal()">Cancel</button>
-   <button class="btn-secondary" onclick="saveContrib('${id||''}','draft')">Save Draft</button>
-   ${canPost?`<button class="btn-primary" onclick="saveContrib('${id||''}','posted')">Save & Post</button>`:''}`);
+  (() => {
+    const idx = id ? _visibleContribs.indexOf(id) : -1;
+    const prevId = idx > 0 ? _visibleContribs[idx-1] : null;
+    const nextId = idx < _visibleContribs.length-1 ? _visibleContribs[idx+1] : null;
+    const navInfo = id && _visibleContribs.length > 1 ? `<span class="text-xs text-gray-400 mx-1">${idx+1}/${_visibleContribs.length}</span>` : '';
+    const prevBtn = prevId ? `<button class="btn-secondary text-xs px-2" onclick="openContribForm('${prevId}')">← Prev</button>` : `<button class="btn-secondary text-xs px-2" disabled style="opacity:0.35;cursor:not-allowed;">← Prev</button>`;
+    const nextBtn = nextId ? `<button class="btn-secondary text-xs px-2" onclick="openContribForm('${nextId}')">Next →</button>` : `<button class="btn-secondary text-xs px-2" disabled style="opacity:0.35;cursor:not-allowed;">Next →</button>`;
+    return `<div class="flex items-center justify-between w-full gap-2">
+      <div class="flex items-center gap-1">${id ? prevBtn+navInfo+nextBtn : ''}</div>
+      <div class="flex gap-2">
+        <button class="btn-secondary" onclick="closeModal()">Cancel</button>
+        <button class="btn-secondary" onclick="saveContrib('${id||''}','draft')">Save Draft</button>
+        ${canPost?`<button class="btn-primary" onclick="saveContrib('${id||''}','posted')">Save & Post</button>`:''}
+      </div>
+    </div>`;
+  })());
   if (c?.account_code) setTimeout(()=>{
     const s=document.getElementById('cf-acct');
     const dp=document.getElementById('cf-district-acct');
@@ -3098,6 +3132,10 @@ function viewContribDetail(id) {
   const c = contribData.find(x=>x.id===id);
   if (!c) return;
   const acct = coaCache.find(a=>a.code===c.account_code);
+  const idx = _visibleContribs.indexOf(id);
+  const prevId = idx > 0 ? _visibleContribs[idx-1] : null;
+  const nextId = idx < _visibleContribs.length-1 ? _visibleContribs[idx+1] : null;
+  const navInfo = _visibleContribs.length > 1 ? `<span class="text-xs text-gray-400">${idx+1} of ${_visibleContribs.length}</span>` : '';
   openModal('Contribution Details', `<div class="space-y-3 text-sm">
     <div class="bg-gray-50 rounded-lg p-3">
       <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Contributor</p>
@@ -3122,7 +3160,15 @@ function viewContribDetail(id) {
         <div class="col-span-2"><span class="text-gray-500 text-xs">Notes:</span><div>${c.notes||'—'}</div></div>
       </div>
     </div>
-  </div>`, `<button class="btn-secondary" onclick="closeModal()">Close</button>`);
+  </div>`,
+  `<div class="flex items-center justify-between w-full gap-2">
+    <div class="flex items-center gap-1">
+      <button class="btn-secondary text-xs px-3" onclick="viewContribDetail('${prevId}')" ${!prevId?'disabled style="opacity:0.4;cursor:not-allowed;"':''}>← Prev</button>
+      ${navInfo}
+      <button class="btn-secondary text-xs px-3" onclick="viewContribDetail('${nextId}')" ${!nextId?'disabled style="opacity:0.4;cursor:not-allowed;"':''}>Next →</button>
+    </div>
+    <button class="btn-secondary" onclick="closeModal()">Close</button>
+  </div>`);
 }
 
 async function saveContrib(id, status) {
@@ -3798,6 +3844,8 @@ async function exportContributorList() {
 // ══════════════════════════════════════════════
 let journalData = [];
 let jnlLines = [];
+let _visibleJournals = []; // IDs of currently displayed journals (after search filter)
+let _jnlSearchQ = '';      // current search query
 
 async function loadJournals() {
   const month=document.getElementById('jnl-month')?.value;
@@ -3820,6 +3868,8 @@ async function loadJournals() {
   const [{data,error},{data:draftData}] = await Promise.all([q, dq]);
   if (error) { toast('Failed to load journals: '+error.message,'error'); return; }
   journalData=data||[];
+  _jnlSearchQ = '';
+  const js = document.getElementById('jnl-search'); if (js) js.value = '';
   renderJournals();
   renderJournalDraftPanel(draftData||[], month);
 }
@@ -3876,11 +3926,26 @@ function jnlShowAll() {
   loadJournals();
 }
 
+function filterJnlsInMemory() {
+  _jnlSearchQ = (document.getElementById('jnl-search')?.value || '').toLowerCase().trim();
+  renderJournals();
+}
+
 function renderJournals() {
   const role=currentProfile?.role||'viewer';
   const canPost=['admin','accountant'].includes(role);
   const canEnter=canPost||role==='dataentry';
-  const rows=journalData.map(j=>`<tr>
+
+  // Apply in-memory search filter
+  const displayData = _jnlSearchQ
+    ? journalData.filter(j => [j.description, j.date, String(j.total_debit), String(j.total_credit), j.ref_no, j.type]
+        .some(v => (v||'').toLowerCase().includes(_jnlSearchQ)))
+    : journalData;
+
+  // Track visible IDs for Prev/Next navigation
+  _visibleJournals = displayData.map(j => j.id);
+
+  const rows=displayData.map(j=>`<tr>
     <td>${j.date}</td><td>${j.ref_no||'—'}</td>
     <td><span class="text-xs font-mono bg-gray-100 px-1 rounded">${j.type}</span></td>
     <td class="max-w-xs truncate">${j.description}</td>
@@ -3894,7 +3959,7 @@ function renderJournals() {
       ${j.status==='posted'&&canPost?`<button class="text-red-500 hover:underline" onclick="reverseJournal('${j.id}')">Reverse</button>`:''}
     </td>
   </tr>`).join('');
-  document.getElementById('jnl-tbody').innerHTML=rows||'<tr><td colspan="8" class="text-center py-8 text-gray-400">No journals found.</td></tr>';
+  document.getElementById('jnl-tbody').innerHTML=rows||`<tr><td colspan="8" class="text-center py-8 text-gray-400">${_jnlSearchQ?'No journals match your search.':'No journals found.'}</td></tr>`;
 }
 
 function openJournalForm(id) {
@@ -3955,9 +4020,22 @@ function openJournalForm(id) {
       </div>
     </div>
   </div>`,
-  `<button class="btn-secondary" onclick="closeModal()">Cancel</button>
-   <button class="btn-secondary" onclick="saveJournal('${id||''}','draft')">Save Draft</button>
-   ${canPost?`<button class="btn-primary" onclick="saveJournal('${id||''}','posted')">Save & Post</button>`:''}`);
+  (() => {
+    const idx = id ? _visibleJournals.indexOf(id) : -1;
+    const prevId = idx > 0 ? _visibleJournals[idx-1] : null;
+    const nextId = idx < _visibleJournals.length-1 ? _visibleJournals[idx+1] : null;
+    const navInfo = id && _visibleJournals.length > 1 ? `<span class="text-xs text-gray-400 mx-1">${idx+1}/${_visibleJournals.length}</span>` : '';
+    const prevBtn = prevId ? `<button class="btn-secondary text-xs px-2" onclick="openJournalForm('${prevId}')">← Prev</button>` : `<button class="btn-secondary text-xs px-2" disabled style="opacity:0.35;cursor:not-allowed;">← Prev</button>`;
+    const nextBtn = nextId ? `<button class="btn-secondary text-xs px-2" onclick="openJournalForm('${nextId}')">Next →</button>` : `<button class="btn-secondary text-xs px-2" disabled style="opacity:0.35;cursor:not-allowed;">Next →</button>`;
+    return `<div class="flex items-center justify-between w-full gap-2">
+      <div class="flex items-center gap-1">${id ? prevBtn+navInfo+nextBtn : ''}</div>
+      <div class="flex gap-2">
+        <button class="btn-secondary" onclick="closeModal()">Cancel</button>
+        <button class="btn-secondary" onclick="saveJournal('${id||''}','draft')">Save Draft</button>
+        ${canPost?`<button class="btn-primary" onclick="saveJournal('${id||''}','posted')">Save & Post</button>`:''}
+      </div>
+    </div>`;
+  })());
   renderJnlLines();
 }
 
@@ -4063,6 +4141,10 @@ function viewJournal(id) {
     const a=coaCache.find(x=>x.code===l.account_code);
     return `<tr><td>${l.account_code} – ${a?.name||''}</td><td>${l.dc}</td><td class="text-right">${fmt(l.amount)}</td><td class="text-xs text-gray-500">${l.description||''}</td></tr>`;
   }).join('');
+  const idx = _visibleJournals.indexOf(id);
+  const prevId = idx > 0 ? _visibleJournals[idx-1] : null;
+  const nextId = idx < _visibleJournals.length-1 ? _visibleJournals[idx+1] : null;
+  const navInfo = _visibleJournals.length > 1 ? `<span class="text-xs text-gray-400">${idx+1} of ${_visibleJournals.length}</span>` : '';
   openModal('Journal Details',`<div class="space-y-2 text-sm">
     <div class="grid grid-cols-2 gap-2 text-xs mb-3">
       <div><span class="text-gray-500">Date:</span> ${j.date}</div>
@@ -4075,7 +4157,15 @@ function viewJournal(id) {
     <div class="flex justify-between font-bold text-xs mt-2 px-1">
       <span>Total Debit: ${fmt(j.total_debit)}</span><span>Total Credit: ${fmt(j.total_credit)}</span>
     </div>
-  </div>`,'<button class="btn-secondary" onclick="closeModal()">Close</button>');
+  </div>`,
+  `<div class="flex items-center justify-between w-full gap-2">
+    <div class="flex items-center gap-1">
+      <button class="btn-secondary text-xs px-3" onclick="viewJournal('${prevId}')" ${!prevId?'disabled style="opacity:0.4;cursor:not-allowed;"':''}>← Prev</button>
+      ${navInfo}
+      <button class="btn-secondary text-xs px-3" onclick="viewJournal('${nextId}')" ${!nextId?'disabled style="opacity:0.4;cursor:not-allowed;"':''}>Next →</button>
+    </div>
+    <button class="btn-secondary" onclick="closeModal()">Close</button>
+  </div>`);
 }
 
 function exportJnlCSV() {
