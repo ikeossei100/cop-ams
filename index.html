@@ -244,8 +244,8 @@ tailwind.config = {
       <!-- SIGN IN panel -->
       <div id="auth-panel-signin" class="space-y-5">
         <div>
-          <label class="form-label">Email Address</label>
-          <input type="email" id="auth-email" class="form-input" placeholder="you@copcanada.org" autocomplete="username">
+          <label class="form-label">Username or Email</label>
+          <input type="text" id="auth-email" class="form-input" placeholder="username  or  email@example.com" autocomplete="username">
         </div>
         <div>
           <label class="form-label">Password</label>
@@ -1431,7 +1431,7 @@ Login at: </textarea>
   <!-- Active Users -->
   <div class="card overflow-hidden">
     <table class="tbl">
-      <thead><tr><th>Name</th><th>User ID</th><th>Role</th><th>District</th><th>Status</th><th>Actions</th></tr></thead>
+      <thead><tr><th>Name</th><th>Username</th><th>Role</th><th>District</th><th>Status</th><th>Actions</th></tr></thead>
       <tbody id="users-tbody"><tr><td colspan="6" class="text-center py-8 text-gray-400">Loading users…</td></tr></tbody>
     </table>
   </div>
@@ -1537,8 +1537,17 @@ function clearAttempts(email) {
   localStorage.removeItem(getLockoutKey(email));
 }
 
+// Resolve a username to its internal Supabase auth email via a SECURITY DEFINER RPC.
+// If the input already contains '@', treat it as a direct email.
+async function resolveLoginEmail(input) {
+  if (input.includes('@')) return input;
+  const { data, error } = await sb.rpc('get_auth_email_by_username', { p_username: input });
+  if (error || !data) return null;
+  return data;
+}
+
 async function authLogin() {
-  const email = document.getElementById('auth-email').value.trim();
+  const raw = document.getElementById('auth-email').value.trim();
   const password = document.getElementById('auth-password').value;
   const errEl = document.getElementById('auth-error');
   errEl.classList.add('hidden');
@@ -1548,18 +1557,30 @@ async function authLogin() {
     errEl.classList.remove('hidden');
     return;
   }
-  if (!email || !password) { errEl.textContent = 'Please enter email and password.'; errEl.classList.remove('hidden'); return; }
-  if (checkLockout(email)) return;
+  if (!raw || !password) { errEl.textContent = 'Please enter your username/email and password.'; errEl.classList.remove('hidden'); return; }
+  if (checkLockout(raw)) return;
+  // Resolve username → internal auth email (if no '@', treat as username)
+  let email;
+  try {
+    email = await resolveLoginEmail(raw);
+  } catch(e) {
+    errEl.textContent = 'Error looking up username. Check your internet connection and try again.';
+    errEl.classList.remove('hidden'); return;
+  }
+  if (!email) {
+    errEl.textContent = 'Username not found. Please check your username, or sign in with your full email address.';
+    errEl.classList.remove('hidden'); return;
+  }
   try {
     const { data, error } = await sb.auth.signInWithPassword({ email, password });
     if (error) {
-      recordFailedAttempt(email);
-      let msg = error.message || 'Invalid email or password.';
+      recordFailedAttempt(raw);
+      let msg = error.message || 'Invalid username/email or password.';
       // Friendly messages for common errors
       if (msg.toLowerCase().includes('invalid login') || msg.toLowerCase().includes('invalid credentials')) {
-        msg = 'Incorrect email or password. Please try again. Use "Forgot your password?" to reset.';
+        msg = 'Incorrect username/email or password. Please try again.';
       } else if (msg.toLowerCase().includes('email not confirmed')) {
-        msg = 'Your email address has not been confirmed. Go to Supabase → Authentication → Settings and disable "Email confirmations", then try again.';
+        msg = 'Your account has not been confirmed. Contact your administrator.';
       } else if (msg.toLowerCase().includes('failed to fetch') || msg.toLowerCase().includes('networkerror') || msg.toLowerCase().includes('network')) {
         msg = 'Cannot reach the server. Check your internet connection. If the problem persists, the database may be paused — visit supabase.com to restore the project.';
       }
@@ -1567,7 +1588,7 @@ async function authLogin() {
       errEl.classList.remove('hidden');
       return;
     }
-    clearAttempts(email);
+    clearAttempts(raw);
     // onAuthStateChange will fire SIGNED_IN and handle loadProfile() + startApp()
     // Nothing else needed here — the auth state listener takes over.
   } catch(e) {
@@ -8635,7 +8656,7 @@ function renderUsers() {
   // ── Approved / active users ──
   const rows = approved.map(u=>`<tr>
     <td class="font-medium">${u.full_name}</td>
-    <td class="text-xs text-gray-500">${u.id.slice(0,12)}…</td>
+    <td class="text-xs font-mono" style="color:#2563eb;">${u.username || '<span class="text-gray-400">—</span>'}</td>
     <td><span class="text-xs font-semibold px-2 py-0.5 rounded-full" style="background:#dbeafe;color:#1d4ed8">${u.role}</span></td>
     <td class="text-xs">${u.district||'—'}</td>
     <td><span class="badge-${u.is_active!==false?'posted':'reversed'}">${u.is_active!==false?'Active':'Inactive'}</span></td>
@@ -8666,31 +8687,84 @@ async function rejectUser(id, name) {
 }
 
 function openUserForm() {
-  openModal('Invite User',`<div class="space-y-3">
-    <p class="text-xs text-gray-500">Create the user in Supabase Auth first (Authentication → Users → Invite user), then register their profile here.</p>
+  openModal('Create New User',`<div class="space-y-3">
+    <div style="background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:8px;padding:10px 14px;">
+      <p class="text-xs font-semibold" style="color:#1d4ed8;">Username Login System</p>
+      <p class="text-xs mt-1 text-gray-600">Each user gets a unique username. Multiple users in the same district can share the same contact email. The system creates their Supabase account automatically.</p>
+    </div>
+    <div class="grid grid-cols-2 gap-3">
+      <div><label class="form-label">Username * <span class="text-gray-400 font-normal">(used to sign in)</span></label><input id="uf-username" class="form-input" placeholder="e.g. kwame.osei" autocomplete="off"></div>
+      <div><label class="form-label">Password *</label><input id="uf-pass" type="password" class="form-input" placeholder="Temporary password" autocomplete="new-password"></div>
+    </div>
     <div><label class="form-label">Full Name *</label><input id="uf-name" class="form-input" placeholder="Full Name"></div>
-    <div><label class="form-label">Auth User ID *</label><input id="uf-uid" class="form-input" placeholder="UUID from Supabase Auth"></div>
+    <div><label class="form-label">Contact Email <span class="text-gray-400 font-normal">(optional — for password resets)</span></label><input id="uf-contact-email" type="email" class="form-input" placeholder="personal@email.com"></div>
     <div class="grid grid-cols-2 gap-3">
       <div><label class="form-label">Role</label><select id="uf-role" class="form-input"><option>viewer</option><option>dataentry</option><option>accountant</option><option>admin</option></select></div>
-      <div><label class="form-label">District</label><input id="uf-dist" class="form-input" placeholder="District"></div>
+      <div><label class="form-label">District</label><input id="uf-dist" class="form-input" placeholder="District name"></div>
     </div>
-  </div>`,`<button class="btn-secondary" onclick="closeModal()">Cancel</button><button class="btn-primary" onclick="saveNewUser()">Create Profile</button>`);
+  </div>`,`<button class="btn-secondary" onclick="closeModal()">Cancel</button><button class="btn-primary" onclick="saveNewUser()">Create User</button>`);
 }
 
 async function saveNewUser() {
-  const full_name=document.getElementById('uf-name').value.trim();
-  const id=document.getElementById('uf-uid').value.trim();
-  const role=document.getElementById('uf-role').value;
-  const district=document.getElementById('uf-dist').value.trim();
-  if(!full_name||!id){toast('Name and User ID required.','error');return;}
-  const {error}=await sb.from('profiles').insert({id,full_name,role,district:district||null,is_active:true,is_approved:true,failed_attempts:0});
-  if(error){toast('Error: '+error.message,'error');return;}
-  await logAction('CREATE_USER','profiles',id,null,{full_name,role});
-  closeModal(); await loadUsers(); toast('User profile created.','success');
+  const username       = (document.getElementById('uf-username').value||'').trim().toLowerCase().replace(/\s+/g,'.');
+  const password       = document.getElementById('uf-pass').value;
+  const full_name      = document.getElementById('uf-name').value.trim();
+  const contact_email  = (document.getElementById('uf-contact-email').value||'').trim().toLowerCase();
+  const role           = document.getElementById('uf-role').value;
+  const district       = document.getElementById('uf-dist').value.trim();
+  if (!username)   { toast('Username is required.','error'); return; }
+  if (!password)   { toast('Password is required.','error'); return; }
+  if (!full_name)  { toast('Full name is required.','error'); return; }
+  if (password.length < 6) { toast('Password must be at least 6 characters.','error'); return; }
+  // Auto-generate internal Supabase auth email from username
+  const auth_email = `${username}@cop-ams.internal`;
+  // Check username is not already taken
+  const { data: existing } = await sb.from('profiles').select('id').ilike('username', username).maybeSingle();
+  if (existing) { toast(`Username "${username}" is already taken. Choose a different one.`,'error'); return; }
+  // Create the Supabase Auth account
+  const { data: authData, error: authErr } = await sb.auth.admin
+    ? await sb.auth.admin.createUser({ email: auth_email, password, email_confirm: true })
+    : { data: null, error: { message: 'Admin API not available from client' } };
+  // If admin API is not available, fall back to signUp (needs email confirmation disabled)
+  let userId;
+  if (authErr || !authData?.user) {
+    // Fallback: use regular signUp — works when "Confirm email" is disabled in Supabase
+    const { data: su, error: suErr } = await sb.auth.signUp({ email: auth_email, password });
+    if (suErr || !su?.user) {
+      toast('Failed to create auth account: ' + (suErr?.message || authErr?.message || 'Unknown error') + '. Make sure "Confirm email" is disabled in Supabase Auth settings.','error');
+      return;
+    }
+    userId = su.user.id;
+  } else {
+    userId = authData.user.id;
+  }
+  // Insert profile row
+  const { error: profErr } = await sb.from('profiles').insert({
+    id: userId,
+    full_name,
+    role,
+    district: district || null,
+    is_active: true,
+    is_approved: true,
+    failed_attempts: 0,
+    username,
+    contact_email: contact_email || null,
+    auth_email
+  });
+  if (profErr) {
+    toast('Auth account created but profile failed: ' + profErr.message + '. Check Supabase for the new user and add profile manually.','error');
+    return;
+  }
+  await logAction('CREATE_USER','profiles', userId, null, { full_name, role, username });
+  closeModal(); await loadUsers(); toast(`User "${username}" created successfully.`,'success');
 }
 
 function openEditUser(u) {
   openModal('Edit User',`<div class="space-y-3">
+    <div class="grid grid-cols-2 gap-3">
+      <div><label class="form-label">Username</label><input id="uf-username" class="form-input" value="${u.username||''}" placeholder="username (leave blank to keep)"></div>
+      <div><label class="form-label">Contact Email</label><input id="uf-contact-email" type="email" class="form-input" value="${u.contact_email||''}" placeholder="personal@email.com"></div>
+    </div>
     <div><label class="form-label">Full Name *</label><input id="uf-name" class="form-input" value="${u.full_name}"></div>
     <div class="grid grid-cols-2 gap-3">
       <div><label class="form-label">Role</label><select id="uf-role" class="form-input">${['viewer','dataentry','accountant','admin'].map(r=>`<option ${u.role===r?'selected':''}>${r}</option>`).join('')}</select></div>
@@ -8701,12 +8775,23 @@ function openEditUser(u) {
 
 async function saveEditUser(id) {
   const full_name=document.getElementById('uf-name').value.trim();
-  const role=document.getElementById('uf-role').value;
-  const district=document.getElementById('uf-dist').value.trim();
+  const role           = document.getElementById('uf-role').value;
+  const district       = document.getElementById('uf-dist').value.trim();
+  const username       = (document.getElementById('uf-username').value||'').trim().toLowerCase().replace(/\s+/g,'.');
+  const contact_email  = (document.getElementById('uf-contact-email').value||'').trim().toLowerCase();
   if(!full_name){toast('Name required.','error');return;}
-  const {error}=await sb.from('profiles').update({full_name,role,district}).eq('id',id);
+  const updates = { full_name, role, district: district||null };
+  if (username) {
+    // Check the new username isn't taken by someone else
+    const { data: ex } = await sb.from('profiles').select('id').ilike('username', username).neq('id', id).maybeSingle();
+    if (ex) { toast(`Username "${username}" is already taken.`,'error'); return; }
+    updates.username = username;
+    updates.auth_email = `${username}@cop-ams.internal`;
+  }
+  if (contact_email) updates.contact_email = contact_email;
+  const {error}=await sb.from('profiles').update(updates).eq('id',id);
   if(error){toast('Error: '+error.message,'error');return;}
-  await logAction('UPDATE_USER','profiles',id,null,{full_name,role});
+  await logAction('UPDATE_USER','profiles',id,null,{full_name,role,username});
   closeModal(); await loadUsers(); toast('User updated.','success');
 }
 
