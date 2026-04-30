@@ -9,7 +9,7 @@
 <script>
 // Auto cache-bust: if deployed version changed, force fresh load from server
 (function(){
-  var V='20260428-1';
+  var V='20260429-1';
   var k='cop_ams_ver';
   var stored=localStorage.getItem(k);
   if(stored!==V){
@@ -6941,11 +6941,48 @@ async function exportReportPDF() {
         if (cells.length === 1 && cells[0].colSpan > 1) return null;
         return cells.map(td=>td.textContent.trim());
       }).filter(Boolean);
+
+      // Build foot rows — styled as a total row
+      const footRows = Array.from(tbl.querySelectorAll('tfoot tr')).map(tr=>{
+        const cells = Array.from(tr.querySelectorAll('td'));
+        const numCols = headers.length || cells.reduce((s,td)=>s+(td.colSpan||1),0);
+        // Expand colSpan cells into separate columns, merging label + right-align amount
+        const expanded = [];
+        cells.forEach(td=>{
+          const span = td.colSpan||1;
+          const txt = td.textContent.trim();
+          if (span > 1) {
+            // Fill colspan cells: blank except last which gets the text
+            for(let i=0;i<span-1;i++) expanded.push({ content:'', styles:{fillColor:[26,60,143],textColor:[255,255,255],fontStyle:'bold',fontSize:9} });
+            expanded.push({ content:txt, styles:{fillColor:[26,60,143],textColor:[255,215,0],fontStyle:'bold',fontSize:9,halign:'right'} });
+          } else {
+            expanded.push({ content:txt, styles:{fillColor:[26,60,143],textColor:[255,215,0],fontStyle:'bold',fontSize:9,halign:'right'} });
+          }
+        });
+        // Pad to header count
+        while(expanded.length < numCols) expanded.unshift({ content:'', styles:{fillColor:[26,60,143]} });
+        return expanded;
+      });
+
       if(rows.length>0) {
         const colStyles=isContrib?{0:{cellWidth:18},1:{cellWidth:16},2:{cellWidth:42},3:{cellWidth:52},4:{cellWidth:28},5:{cellWidth:50},6:{cellWidth:22,halign:'right'}}:{};
-        doc.autoTable({head:[headers],body:rows,startY:y,theme:'striped',
+        // For contributor statement: custom column widths — #, Date, Ref, Account, Description, Amount
+        const contribStmtCols = activeReport==='contributor-statement'
+          ? {0:{cellWidth:10,halign:'center'},1:{cellWidth:26},2:{cellWidth:18},3:{cellWidth:40},4:{cellWidth:'auto'},5:{cellWidth:30,halign:'right'}}
+          : colStyles;
+        doc.autoTable({
+          head:[headers],
+          body:rows,
+          foot:footRows.length?footRows:undefined,
+          startY:y,
+          theme:'striped',
           headStyles:{fillColor:[26,60,143],textColor:[255,255,255],fontStyle:'bold',fontSize:9},
-          bodyStyles:{fontSize:9},columnStyles:colStyles,margin:{left:14,right:14}});
+          bodyStyles:{fontSize:9},
+          footStyles:{fillColor:[26,60,143],textColor:[255,215,0],fontStyle:'bold',fontSize:9},
+          showFoot:'lastPage',
+          columnStyles:contribStmtCols,
+          margin:{left:14,right:14}
+        });
         y=doc.lastAutoTable.finalY+8;
       }
     });
