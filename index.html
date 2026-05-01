@@ -9,7 +9,7 @@
 <script>
 // Auto cache-bust: if deployed version changed, force fresh load from server
 (function(){
-  var V='20260430-1';
+  var V='20260430-2';
   var k='cop_ams_ver';
   var stored=localStorage.getItem(k);
   if(stored!==V){
@@ -679,6 +679,16 @@ tailwind.config = {
         <option value="draft">Draft</option>
         <option value="posted">Posted</option>
         <option value="reversed">Reversed</option>
+      </select>
+      <select id="contrib-filter-district" class="form-input w-40" onchange="filterContribDistrict()">
+        <option value="">All Districts</option>
+      </select>
+      <select id="contrib-sort" class="form-input w-44" onchange="sortContribs()">
+        <option value="date-desc">Date (Newest First)</option>
+        <option value="date-asc">Date (Oldest First)</option>
+        <option value="district">District then Date</option>
+        <option value="name">Contributor Name</option>
+        <option value="amount-desc">Amount (Highest)</option>
       </select>
       <input type="text" id="contrib-search" class="form-input" style="width:200px;" placeholder="🔍 Find by name, date, amount, ref#…" oninput="filterContribsInMemory()">
     </div>
@@ -2647,6 +2657,8 @@ async function exportAccountActivityPDF() {
 let contribData = [];
 let _visibleContribs = []; // IDs of currently displayed contributions (after search filter)
 let _contribSearchQ = '';  // current search query
+let _contribDistrictFilter = ''; // district filter
+let _contribSortBy = 'date-desc'; // sort order
 
 async function loadContributions() {
   const month = document.getElementById('contrib-month')?.value;
@@ -2662,11 +2674,27 @@ async function loadContributions() {
   contribData = data||[];
   _contribSearchQ = '';
   const cs = document.getElementById('contrib-search'); if (cs) cs.value = '';
+  // Repopulate district dropdown
+  const dd = document.getElementById('contrib-filter-district');
+  if (dd) {
+    const prev = dd.value;
+    const districts = [...new Set((data||[]).map(c=>c.district).filter(Boolean))].sort();
+    dd.innerHTML = '<option value="">All Districts</option>' + districts.map(d=>`<option value="${d}"${d===prev?' selected':''}>${d}</option>`).join('');
+    _contribDistrictFilter = districts.includes(prev) ? prev : '';
+  }
   renderContributions();
 }
 
 function filterContribsInMemory() {
   _contribSearchQ = (document.getElementById('contrib-search')?.value || '').toLowerCase().trim();
+  renderContributions();
+}
+function filterContribDistrict() {
+  _contribDistrictFilter = document.getElementById('contrib-filter-district')?.value || '';
+  renderContributions();
+}
+function sortContribs() {
+  _contribSortBy = document.getElementById('contrib-sort')?.value || 'date-desc';
   renderContributions();
 }
 
@@ -2675,11 +2703,22 @@ function renderContributions() {
   const canPost = ['admin','accountant'].includes(role);
   const canEnter = canPost || role==='dataentry';
 
-  // Apply in-memory search filter
-  const displayData = _contribSearchQ
-    ? contribData.filter(c => [c.contributor_name, c.date, String(c.amount), c.ref_no, c.envelope_number, c.description, c.district]
-        .some(v => (v||'').toLowerCase().includes(_contribSearchQ)))
+  // Apply in-memory filters
+  let displayData = _contribDistrictFilter
+    ? contribData.filter(c => c.district === _contribDistrictFilter)
     : contribData;
+  if (_contribSearchQ) {
+    displayData = displayData.filter(c => [c.contributor_name, c.date, String(c.amount), c.ref_no, c.envelope_number, c.description, c.district]
+      .some(v => (v||'').toLowerCase().includes(_contribSearchQ)));
+  }
+
+  // Sort
+  displayData = [...displayData];
+  if (_contribSortBy === 'date-asc')       displayData.sort((a,b)=>a.date.localeCompare(b.date));
+  else if (_contribSortBy === 'date-desc') displayData.sort((a,b)=>b.date.localeCompare(a.date));
+  else if (_contribSortBy === 'district')  displayData.sort((a,b)=>(a.district||'').localeCompare(b.district||'')||b.date.localeCompare(a.date));
+  else if (_contribSortBy === 'name')      displayData.sort((a,b)=>(a.contributor_name||'').localeCompare(b.contributor_name||''));
+  else if (_contribSortBy === 'amount-desc') displayData.sort((a,b)=>(parseFloat(b.amount)||0)-(parseFloat(a.amount)||0));
 
   // Track visible IDs for Prev/Next navigation
   _visibleContribs = displayData.map(c => c.id);
@@ -3694,7 +3733,13 @@ async function postContrib(id) {
   const {error}=await sb.from('contributions').update(updatePayload).eq('id',id).eq('status','draft');
   if (error) { toast('Error posting: '+error.message,'error'); return; }
   await logAction('POST','contributions',id);
-  await loadContributions(); toast('Contribution posted and journal entry created.','success');
+  // Optimistically update in-memory so UI reflects posted status immediately
+  const local = contribData.find(c=>c.id===id);
+  if (local) { local.status='posted'; local.posted_at=updatePayload.posted_at; }
+  renderContributions();
+  toast('Contribution posted and journal entry created.','success');
+  // Reload in background to sync any server-side changes
+  loadContributions();
 }
 
 async function reverseContrib(id) {
