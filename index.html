@@ -9,7 +9,7 @@
 <script>
 // Auto cache-bust: if deployed version changed, force fresh load from server
 (function(){
-  var V='20260429-1';
+  var V='20260429-2';
   var k='cop_ams_ver';
   var stored=localStorage.getItem(k);
   if(stored!==V){
@@ -3909,6 +3909,7 @@ function renderJournalDraftPanel(drafts, month) {
       <button class="text-blue-600 hover:underline" onclick="viewJournal('${j.id}')">View</button>
       ${canEnter?`<button class="text-indigo-600 hover:underline" onclick="openJournalForm('${j.id}')">Edit</button>`:''}
       ${canPost?`<button class="text-green-600 hover:underline font-semibold" onclick="postJournal('${j.id}')">Post</button>`:''}
+      ${canEnter?`<button class="text-red-500 hover:underline font-semibold" onclick="deleteJournal('${j.id}')">Delete</button>`:''}
     </td>
   </tr>`).join('');
   const tbody = document.getElementById('jnl-draft-tbody');
@@ -3956,10 +3957,24 @@ function renderJournals() {
       <button class="text-blue-600 hover:underline" onclick="viewJournal('${j.id}')">View</button>
       ${j.status==='draft'&&canEnter?`<button class="text-indigo-600 hover:underline" onclick="openJournalForm('${j.id}')">Edit</button>`:''}
       ${j.status==='draft'&&canPost?`<button class="text-green-600 hover:underline" onclick="postJournal('${j.id}')">Post</button>`:''}
+      ${j.status==='draft'&&canEnter?`<button class="text-red-500 hover:underline font-semibold" onclick="deleteJournal('${j.id}')">Delete</button>`:''}
       ${j.status==='posted'&&canPost?`<button class="text-red-500 hover:underline" onclick="reverseJournal('${j.id}')">Reverse</button>`:''}
     </td>
   </tr>`).join('');
   document.getElementById('jnl-tbody').innerHTML=rows||`<tr><td colspan="8" class="text-center py-8 text-gray-400">${_jnlSearchQ?'No journals match your search.':'No journals found.'}</td></tr>`;
+}
+
+async function deleteJournal(id) {
+  const j = journalData.find(x => x.id === id);
+  if (!j) return;
+  if (j.status !== 'draft') { toast('Only draft journal entries can be deleted.', 'error'); return; }
+  const label = [j.date, j.ref_no, j.description, fmt(j.total_debit)].filter(Boolean).join(' · ');
+  if (!confirm(`Delete this draft journal entry?\n\n${label}\n\nThis cannot be undone.`)) return;
+  const { error } = await sb.from('journals').delete().eq('id', id).eq('status', 'draft');
+  if (error) { toast('Delete failed: ' + error.message, 'error'); return; }
+  await logAction('DELETE', 'journals', id, { ...j }, null);
+  toast('Draft journal entry deleted.', 'success');
+  await loadJournals();
 }
 
 function openJournalForm(id) {
