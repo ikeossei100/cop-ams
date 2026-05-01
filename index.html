@@ -9,7 +9,7 @@
 <script>
 // Auto cache-bust: if deployed version changed, force fresh load from server
 (function(){
-  var V='20260430-2';
+  var V='20260430-3';
   var k='cop_ams_ver';
   var stored=localStorage.getItem(k);
   if(stored!==V){
@@ -2689,6 +2689,10 @@ function filterContribsInMemory() {
   _contribSearchQ = (document.getElementById('contrib-search')?.value || '').toLowerCase().trim();
   renderContributions();
 }
+function toggleOtherInput(selId, otherId) {
+  const other = document.getElementById(otherId);
+  if (other) other.style.display = document.getElementById(selId)?.value === 'Other' ? 'block' : 'none';
+}
 function filterContribDistrict() {
   _contribDistrictFilter = document.getElementById('contrib-filter-district')?.value || '';
   renderContributions();
@@ -2944,6 +2948,13 @@ async function openContribForm(id) {
     return html;
   })();
   const canPost = ['admin','accountant'].includes(currentProfile?.role);
+  const isAdmin = currentProfile?.role === 'admin';
+  const DESC_PRESETS = ['Sunday Offering', 'Midweek Offering'];
+  const REF_PRESETS  = ['E-transfer', 'Cash'];
+  const descPreset = DESC_PRESETS.includes(c?.description) ? c.description : (c?.description ? 'Other' : '');
+  const descOther  = DESC_PRESETS.includes(c?.description) ? '' : (c?.description || '');
+  const refPreset  = REF_PRESETS.includes(c?.ref_no) ? c.ref_no : (c?.ref_no ? 'Other' : '');
+  const refOther   = REF_PRESETS.includes(c?.ref_no) ? '' : (c?.ref_no || '');
   openModal(c?'Edit Contribution':'New Contribution', `<div class="space-y-3">
     ${!c ? `
     <!-- Contributor lookup (new entries only) -->
@@ -3000,7 +3011,16 @@ async function openContribForm(id) {
       </div>
     </div>
     <input type="hidden" id="cf-date" value="${c?.date||today()}">
-    <div><label class="form-label">Ref#</label><input id="cf-ref" class="form-input" value="${c?.ref_no||''}" placeholder="Ref number"></div>
+    <div>
+      <label class="form-label">Ref# / Payment Method</label>
+      <select id="cf-ref-sel" class="form-input" onchange="toggleOtherInput('cf-ref-sel','cf-ref-other')">
+        <option value="">— Select —</option>
+        <option value="E-transfer" ${refPreset==='E-transfer'?'selected':''}>E-transfer</option>
+        <option value="Cash" ${refPreset==='Cash'?'selected':''}>Cash</option>
+        <option value="Other" ${refPreset==='Other'?'selected':''}>Other</option>
+      </select>
+      <input id="cf-ref-other" class="form-input mt-1" placeholder="Enter ref# / details…" value="${refOther}" style="display:${refPreset==='Other'?'block':'none'};">
+    </div>
     <div>
       <label class="form-label">Account *</label>
       <select id="cf-acct" class="form-input" onchange="toggleContribDistrictPicker()">
@@ -3019,10 +3039,19 @@ async function openContribForm(id) {
         ${bankAcctOptions(c?.bank_account_code||'1110')}
       </select>
     </div>
-    <div><label class="form-label">Description</label><input id="cf-desc" class="form-input" value="${c?.description||''}" placeholder="e.g. Sunday Service Offering"></div>
+    <div>
+      <label class="form-label">Description</label>
+      <select id="cf-desc-sel" class="form-input" onchange="toggleOtherInput('cf-desc-sel','cf-desc-other')">
+        <option value="">— Select —</option>
+        <option value="Sunday Offering" ${descPreset==='Sunday Offering'?'selected':''}>Sunday Offering</option>
+        <option value="Midweek Offering" ${descPreset==='Midweek Offering'?'selected':''}>Midweek Offering</option>
+        <option value="Other" ${descPreset==='Other'?'selected':''}>Other</option>
+      </select>
+      <input id="cf-desc-other" class="form-input mt-1" placeholder="Enter description…" value="${descOther}" style="display:${descPreset==='Other'?'block':'none'};">
+    </div>
     <div class="grid grid-cols-2 gap-3">
       <div><label class="form-label">Amount (CAD) *</label><input type="number" step="0.01" id="cf-amt" class="form-input" value="${c?.amount||''}" placeholder="0.00"></div>
-      <div><label class="form-label">District</label><input id="cf-dist" class="form-input" value="${c?.district||currentProfile?.district||''}" placeholder="e.g. Toronto Central"></div>
+      <div><label class="form-label">District</label><input id="cf-dist" class="form-input" value="${c?.district||currentProfile?.district||''}" placeholder="e.g. Toronto Central" ${!isAdmin?'readonly style="background:#f3f4f6;cursor:not-allowed;" title="District is set to your district"':''}></div>
     </div>
     <div><label class="form-label">Notes</label><textarea id="cf-notes" class="form-input" rows="2" placeholder="Optional notes">${c?.notes||''}</textarea></div>
   </div>`,
@@ -3128,7 +3157,8 @@ function cfFillFromLookup(encoded) {
     set('cf-cphone',   r.contributor_phone);
     set('cf-cemail',   r.contributor_email);
     set('cf-caddress', r.contributor_address);
-    set('cf-dist',     r.district);
+    // Only overwrite district from lookup if admin; non-admin stays in their own district
+    if (currentProfile?.role === 'admin') set('cf-dist', r.district);
     const res = document.getElementById('cf-lookup-results');
     if (res) res.style.display = 'none';
     const inp = document.getElementById('cf-lookup');
@@ -3227,8 +3257,8 @@ async function saveContrib(id, status) {
     contributor_phone: document.getElementById('cf-cphone').value.trim(),
     contributor_email: document.getElementById('cf-cemail').value.trim(),
     contributor_address: document.getElementById('cf-caddress').value.trim(),
-    ref_no: document.getElementById('cf-ref').value.trim(),
-    description: document.getElementById('cf-desc').value.trim(),
+    ref_no: (()=>{ const s=document.getElementById('cf-ref-sel'); const o=document.getElementById('cf-ref-other'); return s?.value==='Other'?(o?.value.trim()||''):(s?.value||''); })(),
+    description: (()=>{ const s=document.getElementById('cf-desc-sel'); const o=document.getElementById('cf-desc-other'); return s?.value==='Other'?(o?.value.trim()||''):(s?.value||''); })(),
     amount,
     district: document.getElementById('cf-dist').value.trim(),
     notes: document.getElementById('cf-notes').value.trim(),
@@ -6122,10 +6152,14 @@ async function openAllStatementsSelector() {
   const to=document.getElementById('rpt-to').value;
   if(!from||!to){toast('Set a date range first.','error');return;}
 
-  // Fetch all distinct contributor names in the period
-  const {data,error}=await sb.from('contributions').select('contributor_name')
+  // Fetch all distinct contributor names in the period — scoped to district for non-admin
+  let stmtQ = sb.from('contributions').select('contributor_name')
     .eq('status','posted').gte('date',from).lte('date',to)
     .not('contributor_name','is',null).neq('contributor_name','');
+  const _stmtRole = currentProfile?.role;
+  const _stmtDist = currentProfile?.district;
+  if (_stmtRole !== 'admin' && _stmtDist) stmtQ = stmtQ.eq('district', _stmtDist);
+  const {data,error}=await stmtQ;
   if(error){toast('Error: '+error.message,'error');return;}
   const names=[...new Set((data||[]).map(r=>r.contributor_name).filter(Boolean))].sort();
   if(!names.length){toast('No contributors found in this period.','error');return;}
