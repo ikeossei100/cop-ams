@@ -9,7 +9,7 @@
 <script>
 // Auto cache-bust: if deployed version changed, force fresh load from server
 (function(){
-  var V='20260430-5';
+  var V='20260501-1';
   var k='cop_ams_ver';
   var stored=localStorage.getItem(k);
   if(stored!==V){
@@ -810,6 +810,9 @@ tailwind.config = {
         <option value="draft">Draft</option>
         <option value="posted">Posted</option>
         <option value="reversed">Reversed</option>
+      </select>
+      <select id="jnl-filter-district" class="form-input w-40" onchange="filterJnlDistrict()">
+        <option value="">All Districts</option>
       </select>
       <select id="jnl-sort" class="form-input w-44" onchange="sortJournals()">
         <option value="date-desc">Date (Newest First)</option>
@@ -3946,6 +3949,7 @@ let jnlLines = [];
 let _visibleJournals = []; // IDs of currently displayed journals (after search filter)
 let _jnlSearchQ = '';      // current search query
 let _jnlSortBy = 'date-desc'; // sort order
+let _jnlDistrictFilter = ''; // district filter
 
 async function loadJournals() {
   const month=document.getElementById('jnl-month')?.value;
@@ -3970,6 +3974,14 @@ async function loadJournals() {
   journalData=data||[];
   _jnlSearchQ = '';
   const js = document.getElementById('jnl-search'); if (js) js.value = '';
+  // Repopulate district dropdown
+  const jdd = document.getElementById('jnl-filter-district');
+  if (jdd) {
+    const prev = jdd.value;
+    const districts = [...new Set((data||[]).map(j=>j.district).filter(Boolean))].sort();
+    jdd.innerHTML = '<option value="">All Districts</option>' + districts.map(d=>`<option value="${d}"${d===prev?' selected':''}>${d}</option>`).join('');
+    _jnlDistrictFilter = districts.includes(prev) ? prev : '';
+  }
   renderJournals();
   renderJournalDraftPanel(draftData||[], month);
 }
@@ -4035,17 +4047,24 @@ function sortJournals() {
   _jnlSortBy = document.getElementById('jnl-sort')?.value || 'date-desc';
   renderJournals();
 }
+function filterJnlDistrict() {
+  _jnlDistrictFilter = document.getElementById('jnl-filter-district')?.value || '';
+  renderJournals();
+}
 
 function renderJournals() {
   const role=currentProfile?.role||'viewer';
   const canPost=['admin','accountant'].includes(role);
   const canEnter=canPost||role==='dataentry';
 
-  // Apply in-memory search filter
-  let displayData = _jnlSearchQ
-    ? journalData.filter(j => [j.description, j.date, String(j.total_debit), String(j.total_credit), j.ref_no, j.type]
-        .some(v => (v||'').toLowerCase().includes(_jnlSearchQ)))
+  // Apply in-memory filters
+  let displayData = _jnlDistrictFilter
+    ? journalData.filter(j => j.district === _jnlDistrictFilter)
     : journalData;
+  if (_jnlSearchQ) {
+    displayData = displayData.filter(j => [j.description, j.date, String(j.total_debit), String(j.total_credit), j.ref_no, j.type]
+      .some(v => (v||'').toLowerCase().includes(_jnlSearchQ)));
+  }
 
   // Apply sort
   displayData = [...displayData];
@@ -4253,6 +4272,11 @@ async function saveJournal(id, status) {
   const payload={date,description,type,ref_no,
     lines:jnlLines,total_debit:db,total_credit:cr,status,entered_by:myId()};
   if(status==='posted'){payload.posted_at=new Date().toISOString();payload.posted_by=myId();}
+  // Include district if column exists in journals table
+  const _myDistrict = currentProfile?.district;
+  if (_myDistrict) {
+    try { const chk=await sb.from('journals').select('district').limit(1); if(!chk.error) payload.district=_myDistrict; } catch(e){}
+  }
   let error;
   if(id){({error}=await sb.from('journals').update(payload).eq('id',id).eq('status','draft'));}
   else{({error}=await sb.from('journals').insert(payload));}
@@ -4282,6 +4306,7 @@ async function reverseJournal(id) {
     ref_no:`REV-${orig.ref_no||id.slice(0,8)}`,lines:revLines,
     total_debit:orig.total_credit,total_credit:orig.total_debit,status:'posted',
     entered_by:myId(),posted_by:myId(),posted_at:new Date().toISOString(),reversal_of:id};
+  if (orig.district) reversal.district = orig.district;
   const {error:e1}=await sb.from('journals').update({status:'reversed'}).eq('id',id);
   const {error:e2}=await sb.from('journals').insert(reversal);
   if(e1||e2){toast('Reversal error.','error');return;}
