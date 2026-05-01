@@ -9,7 +9,7 @@
 <script>
 // Auto cache-bust: if deployed version changed, force fresh load from server
 (function(){
-  var V='20260430-4';
+  var V='20260430-5';
   var k='cop_ams_ver';
   var stored=localStorage.getItem(k);
   if(stored!==V){
@@ -810,6 +810,12 @@ tailwind.config = {
         <option value="draft">Draft</option>
         <option value="posted">Posted</option>
         <option value="reversed">Reversed</option>
+      </select>
+      <select id="jnl-sort" class="form-input w-44" onchange="sortJournals()">
+        <option value="date-desc">Date (Newest First)</option>
+        <option value="date-asc">Date (Oldest First)</option>
+        <option value="type">Type then Date</option>
+        <option value="amount-desc">Amount (Highest)</option>
       </select>
       <input type="text" id="jnl-search" class="form-input" style="width:200px;" placeholder="🔍 Find by description, date, ref#…" oninput="filterJnlsInMemory()">
     </div>
@@ -3939,6 +3945,7 @@ let journalData = [];
 let jnlLines = [];
 let _visibleJournals = []; // IDs of currently displayed journals (after search filter)
 let _jnlSearchQ = '';      // current search query
+let _jnlSortBy = 'date-desc'; // sort order
 
 async function loadJournals() {
   const month=document.getElementById('jnl-month')?.value;
@@ -4024,6 +4031,10 @@ function filterJnlsInMemory() {
   _jnlSearchQ = (document.getElementById('jnl-search')?.value || '').toLowerCase().trim();
   renderJournals();
 }
+function sortJournals() {
+  _jnlSortBy = document.getElementById('jnl-sort')?.value || 'date-desc';
+  renderJournals();
+}
 
 function renderJournals() {
   const role=currentProfile?.role||'viewer';
@@ -4031,10 +4042,17 @@ function renderJournals() {
   const canEnter=canPost||role==='dataentry';
 
   // Apply in-memory search filter
-  const displayData = _jnlSearchQ
+  let displayData = _jnlSearchQ
     ? journalData.filter(j => [j.description, j.date, String(j.total_debit), String(j.total_credit), j.ref_no, j.type]
         .some(v => (v||'').toLowerCase().includes(_jnlSearchQ)))
     : journalData;
+
+  // Apply sort
+  displayData = [...displayData];
+  if (_jnlSortBy === 'date-asc')        displayData.sort((a,b)=>a.date.localeCompare(b.date));
+  else if (_jnlSortBy === 'date-desc')  displayData.sort((a,b)=>b.date.localeCompare(a.date));
+  else if (_jnlSortBy === 'type')       displayData.sort((a,b)=>(a.type||'').localeCompare(b.type||'')||b.date.localeCompare(a.date));
+  else if (_jnlSortBy === 'amount-desc') displayData.sort((a,b)=>(parseFloat(b.total_debit)||0)-(parseFloat(a.total_debit)||0));
 
   // Track visible IDs for Prev/Next navigation
   _visibleJournals = displayData.map(j => j.id);
@@ -4081,6 +4099,12 @@ function openJournalForm(id) {
     {account_code:'',    dc:'CR',amount:'',description:''}
   ];
   const canPost=['admin','accountant'].includes(currentProfile?.role);
+  const JNL_DESC_PRESETS = ['Sunday Offering','Midweek Offering','Tithe','Other Income','Payment','Transfer'];
+  const JNL_REF_PRESETS  = ['E-transfer','Cash'];
+  const jDescPreset = JNL_DESC_PRESETS.includes(j?.description) ? j.description : (j?.description ? 'Other' : '');
+  const jDescOther  = JNL_DESC_PRESETS.includes(j?.description) ? '' : (j?.description || '');
+  const jRefPreset  = JNL_REF_PRESETS.includes(j?.ref_no) ? j.ref_no : (j?.ref_no ? 'Other' : '');
+  const jRefOther   = JNL_REF_PRESETS.includes(j?.ref_no) ? '' : (j?.ref_no || '');
   const _jd = j?.date||today();
   const _jyr = parseInt(_jd.substring(0,4));
   const _jmo = _jd.substring(5,7);
@@ -4111,10 +4135,32 @@ function openJournalForm(id) {
       </div>
       <div class="flex gap-2">
         <div class="flex-1"><label class="form-label" style="margin-bottom:3px;">Type</label><select id="jf-type" class="form-input text-xs">${['JE','CR','CD','AP','AR','BR'].map(t=>`<option ${j?.type===t?'selected':''}>${t}</option>`).join('')}</select></div>
-        <div class="flex-1"><label class="form-label" style="margin-bottom:3px;">Ref#</label><input id="jf-ref" class="form-input text-xs" value="${j?.ref_no||''}"></div>
+        <div class="flex-1">
+          <label class="form-label" style="margin-bottom:3px;">Ref# / Method</label>
+          <select id="jf-ref-sel" class="form-input text-xs" onchange="toggleOtherInput('jf-ref-sel','jf-ref-other')">
+            <option value="">— Select —</option>
+            <option value="E-transfer" ${jRefPreset==='E-transfer'?'selected':''}>E-transfer</option>
+            <option value="Cash" ${jRefPreset==='Cash'?'selected':''}>Cash</option>
+            <option value="Other" ${jRefPreset==='Other'?'selected':''}>Other</option>
+          </select>
+          <input id="jf-ref-other" class="form-input text-xs mt-1" placeholder="Enter ref#…" value="${jRefOther}" style="display:${jRefPreset==='Other'?'block':'none'};">
+        </div>
       </div>
     </div>
-    <div><label class="form-label" style="margin-bottom:3px;">Description *</label><input id="jf-desc" class="form-input text-xs" value="${j?.description||''}" placeholder="Journal description"></div>
+    <div>
+      <label class="form-label" style="margin-bottom:3px;">Description *</label>
+      <select id="jf-desc-sel" class="form-input text-xs" onchange="toggleOtherInput('jf-desc-sel','jf-desc-other')">
+        <option value="">— Select —</option>
+        <option value="Sunday Offering" ${jDescPreset==='Sunday Offering'?'selected':''}>Sunday Offering</option>
+        <option value="Midweek Offering" ${jDescPreset==='Midweek Offering'?'selected':''}>Midweek Offering</option>
+        <option value="Tithe" ${jDescPreset==='Tithe'?'selected':''}>Tithe</option>
+        <option value="Other Income" ${jDescPreset==='Other Income'?'selected':''}>Other Income</option>
+        <option value="Payment" ${jDescPreset==='Payment'?'selected':''}>Payment</option>
+        <option value="Transfer" ${jDescPreset==='Transfer'?'selected':''}>Transfer</option>
+        <option value="Other" ${jDescPreset==='Other'?'selected':''}>Other</option>
+      </select>
+      <input id="jf-desc-other" class="form-input text-xs mt-1" placeholder="Enter description…" value="${jDescOther}" style="display:${jDescPreset==='Other'?'block':'none'};">
+    </div>
     <div>
       <div class="flex items-center justify-between mb-1">
         <label class="form-label mb-0">Journal Lines</label>
@@ -4196,14 +4242,15 @@ function updateJnlTotals() {
 
 async function saveJournal(id, status) {
   const date=document.getElementById('jf-date')?.value;
-  const description=document.getElementById('jf-desc')?.value.trim();
+  const description=(()=>{ const s=document.getElementById('jf-desc-sel'); const o=document.getElementById('jf-desc-other'); return s?.value==='Other'?(o?.value.trim()||''):(s?.value||''); })();
+  const ref_no=(()=>{ const s=document.getElementById('jf-ref-sel'); const o=document.getElementById('jf-ref-other'); return s?.value==='Other'?(o?.value.trim()||''):(s?.value||''); })();
   const type=document.getElementById('jf-type')?.value;
   if (!date||!description) { toast('Date and description required.','error'); return; }
   let db=0,cr=0;
   jnlLines.forEach(l=>{ const a=parseFloat(l.amount)||0; if(l.dc==='DB')db+=a; else cr+=a; });
   if (status==='posted'&&Math.abs(db-cr)>=0.005) { toast('Cannot post: debits and credits must balance.','error'); return; }
   if (jnlLines.some(l=>!l.account_code||!l.amount)) { toast('All lines must have an account and amount.','error'); return; }
-  const payload={date,description,type,ref_no:document.getElementById('jf-ref').value.trim(),
+  const payload={date,description,type,ref_no,
     lines:jnlLines,total_debit:db,total_credit:cr,status,entered_by:myId()};
   if(status==='posted'){payload.posted_at=new Date().toISOString();payload.posted_by=myId();}
   let error;
