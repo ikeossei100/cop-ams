@@ -9,7 +9,7 @@
 <script>
 // Auto cache-bust: if deployed version changed, force fresh load from server
 (function(){
-  var V='20260429-2';
+  var V='20260430-1';
   var k='cop_ams_ver';
   var stored=localStorage.getItem(k);
   if(stored!==V){
@@ -2866,7 +2866,7 @@ async function executeBulkPost(ids) {
     try {
       const jnlId = await createContribJournal(contrib);
       const payload = { status:'posted', posted_at: new Date().toISOString(), posted_by: myId() };
-      if (jnlId) payload.journal_id = jnlId;
+      if (jnlId) { try { const chk=await sb.from('contributions').select('journal_id').eq('id',id).limit(1); if(!chk.error) payload.journal_id=jnlId; } catch(e){} }
       const { error } = await sb.from('contributions').update(payload).eq('id', id).eq('status','draft');
       if (error) { failed++; } else { await logAction('POST','contributions',id); }
     } catch(e) { failed++; }
@@ -3209,7 +3209,7 @@ async function saveContrib(id, status) {
   // If posting, create the double-entry journal
   if (status==='posted' && savedId) {
     const jnlId = await createContribJournal({...payload, id:savedId});
-    if (jnlId) await sb.from('contributions').update({journal_id:jnlId}).eq('id',savedId);
+    if (jnlId) { try { const chk=await sb.from('contributions').select('journal_id').eq('id',savedId).limit(1); if(!chk.error) await sb.from('contributions').update({journal_id:jnlId}).eq('id',savedId); } catch(e){} }
   }
 
   await logAction(id?'UPDATE':'CREATE','contributions',savedId||'new',null,{contributor_name:payload.contributor_name,amount,status});
@@ -3592,7 +3592,7 @@ async function confirmContribImport() {
     // Create journal for posted contributions
     if (postImmediately && ins?.id) {
       const jnlId = await createContribJournal({ ...payload, id: ins.id });
-      if (jnlId) await sb.from('contributions').update({ journal_id: jnlId }).eq('id', ins.id);
+      if (jnlId) { try { const chk=await sb.from('contributions').select('journal_id').eq('id',ins.id).limit(1); if(!chk.error) await sb.from('contributions').update({journal_id:jnlId}).eq('id',ins.id); } catch(e){} }
     }
   }
 
@@ -3685,10 +3685,14 @@ async function postContrib(id) {
   const jnlId = await createContribJournal(contrib);
 
   const updatePayload = { status:'posted', posted_at:new Date().toISOString(), posted_by:myId() };
-  if (jnlId) updatePayload.journal_id = jnlId;
+  // Only include journal_id if the column exists (avoids error if migration not yet run)
+  try {
+    const testCheck = await sb.from('contributions').select('journal_id').eq('id',id).limit(1);
+    if (!testCheck.error) updatePayload.journal_id = jnlId || null;
+  } catch(e) { /* column doesn't exist yet — skip */ }
 
   const {error}=await sb.from('contributions').update(updatePayload).eq('id',id).eq('status','draft');
-  if (error) { toast('Error: '+error.message,'error'); return; }
+  if (error) { toast('Error posting: '+error.message,'error'); return; }
   await logAction('POST','contributions',id);
   await loadContributions(); toast('Contribution posted and journal entry created.','success');
 }
@@ -3721,7 +3725,7 @@ async function reverseContrib(id) {
   // Create reversal journal entry
   if (revIns?.id) {
     const jnlId = await createContribJournal({...reversalPayload, id:revIns.id});
-    if (jnlId) await sb.from('contributions').update({journal_id:jnlId}).eq('id',revIns.id);
+    if (jnlId) { try { const chk=await sb.from('contributions').select('journal_id').eq('id',revIns.id).limit(1); if(!chk.error) await sb.from('contributions').update({journal_id:jnlId}).eq('id',revIns.id); } catch(e){} }
   }
 
   await logAction('REVERSE','contributions',id);
