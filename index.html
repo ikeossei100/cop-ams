@@ -9,7 +9,7 @@
 <script>
 // Auto cache-bust: if deployed version changed, force fresh load from server
 (function(){
-  var V='20260501-1';
+  var V='20260501-2';
   var k='cop_ams_ver';
   var stored=localStorage.getItem(k);
   if(stored!==V){
@@ -1780,8 +1780,7 @@ async function loadProfile() {
       try {
         const { data: peers } = await sb.from('profiles')
           .select('id')
-          .eq('district', data.district)
-          .eq('is_active', true);
+          .eq('district', data.district); // all users incl. inactive — needed for historical records
         _districtUids = (peers || []).map(p => p.id);
       } catch(e) {
         _districtUids = null;
@@ -4751,7 +4750,8 @@ let _rptDistrictUids = null; // user IDs belonging to the selected district
 async function loadRptDistrictUids(district) {
   if (!district || district === 'all') { _rptDistrictUids = null; return; }
   if (district === '__none__') { _rptDistrictUids = []; return; }
-  const { data } = await sb.from('profiles').select('id').eq('district', district).eq('is_active', true);
+  // Include ALL users (active + inactive) so historical entries from deactivated users still appear
+  const { data } = await sb.from('profiles').select('id').eq('district', district);
   _rptDistrictUids = (data || []).map(u => u.id);
 }
 
@@ -4769,16 +4769,22 @@ function reportContribFilter(q) {
   return q;
 }
 
-// Filter for journals table (no district column — filter by entered_by)
+// Filter for journals table — uses district column (new entries) OR entered_by (legacy entries)
 function reportJournalFilter(q) {
   const role = currentProfile?.role;
   const uid = myId();
   if (role === 'admin' && _rptUserFilter && _rptUserFilter !== 'all') {
-    if (_rptDistrictUids && _rptDistrictUids.length > 0) return q.in('entered_by', _rptDistrictUids);
-    if (_rptDistrictUids && _rptDistrictUids.length === 0) return q.eq('entered_by', 'no-match');
-    return q;
+    if (_rptUserFilter === '__none__') return q.is('district', null);
+    // Match by district column (new) OR entered_by membership (legacy)
+    if (_rptDistrictUids && _rptDistrictUids.length > 0)
+      return q.or(`district.eq.${_rptUserFilter},entered_by.in.(${_rptDistrictUids.join(',')})`);
+    return q.eq('district', _rptUserFilter);
   }
   if (role === 'admin') return q;
+  const myDistrict = currentProfile?.district;
+  if (myDistrict && _districtUids && _districtUids.length > 0)
+    return q.or(`district.eq.${myDistrict},entered_by.in.(${_districtUids.join(',')})`);
+  if (myDistrict && uid) return q.or(`district.eq.${myDistrict},entered_by.eq.${uid}`);
   if (_districtUids && _districtUids.length > 0) return q.in('entered_by', _districtUids);
   if (uid) return q.eq('entered_by', uid);
   return q;
@@ -5039,15 +5045,20 @@ function dashContribFilter(q) {
 }
 function dashJournalFilter(q) {
   if (currentProfile?.role === 'admin') return q;
+  const myDistrict = currentProfile?.district;
+  const uid = myId();
+  if (myDistrict && _districtUids && _districtUids.length > 0)
+    return q.or(`district.eq.${myDistrict},entered_by.in.(${_districtUids.join(',')})`);
+  if (myDistrict && uid) return q.or(`district.eq.${myDistrict},entered_by.eq.${uid}`);
   return withUser(q);
 }
-// For draft journals on dashboard — uses district column (set on new entries)
-// with entered_by fallback for older entries that pre-date the district column
 function dashDraftJournalFilter(q) {
-  // Journals have no district column — scope by entered_by using _districtUids
-  // (all user IDs in the same district, loaded at login from profiles).
-  // Admin sees everything; district users see entries from anyone in their district.
   if (currentProfile?.role === 'admin') return q;
+  const myDistrict = currentProfile?.district;
+  const uid = myId();
+  if (myDistrict && _districtUids && _districtUids.length > 0)
+    return q.or(`district.eq.${myDistrict},entered_by.in.(${_districtUids.join(',')})`);
+  if (myDistrict && uid) return q.or(`district.eq.${myDistrict},entered_by.eq.${uid}`);
   return withUser(q);
 }
 
