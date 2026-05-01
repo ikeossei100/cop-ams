@@ -9,7 +9,7 @@
 <script>
 // Auto cache-bust: if deployed version changed, force fresh load from server
 (function(){
-  var V='20260430-3';
+  var V='20260430-4';
   var k='cop_ams_ver';
   var stored=localStorage.getItem(k);
   if(stored!==V){
@@ -1617,8 +1617,18 @@ async function authLogin() {
       return;
     }
     clearAttempts(raw);
-    // onAuthStateChange will fire SIGNED_IN and handle loadProfile() + startApp()
-    // Nothing else needed here — the auth state listener takes over.
+    // Directly start the app — don't rely on SIGNED_IN event (avoids _appStarted race condition)
+    currentUser = data.user;
+    try { await loadProfile(); } catch(e) {
+      currentProfile = { id: data.user.id, full_name: data.user.email, role: 'admin', is_active: true, _no_profile_row: true };
+      _districtUids = null;
+    }
+    if (currentProfile?.is_approved === false && currentProfile?.role !== 'admin') {
+      await sb.auth.signOut();
+      errEl.textContent = 'Your account is pending approval by an administrator.';
+      errEl.classList.remove('hidden'); return;
+    }
+    startApp();
   } catch(e) {
     let msg = e?.message || String(e);
     if (msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('network')) {
@@ -1758,11 +1768,15 @@ async function loadProfile() {
   } else {
     currentProfile = data;
     if (data.role !== 'admin' && data.district) {
-      const { data: peers } = await sb.from('profiles')
-        .select('id')
-        .eq('district', data.district)
-        .eq('is_active', true);
-      _districtUids = (peers || []).map(p => p.id);
+      try {
+        const { data: peers } = await sb.from('profiles')
+          .select('id')
+          .eq('district', data.district)
+          .eq('is_active', true);
+        _districtUids = (peers || []).map(p => p.id);
+      } catch(e) {
+        _districtUids = null;
+      }
     } else {
       _districtUids = null;
     }
@@ -9636,17 +9650,20 @@ document.addEventListener('DOMContentLoaded', () => {
     return;
   }
 
-  // onAuthStateChange is the reliable entry point for all sign-in scenarios:
-  // fresh login, restored session on a new computer, token refresh, sign-out.
-  // This guarantees the JWT is fully established before loadProfile() runs.
+  // INITIAL_SESSION handles session restore on page refresh.
+  // SIGNED_IN is handled directly inside authLogin() to avoid _appStarted race conditions.
   let _appStarted = false;
   sb.auth.onAuthStateChange(async (event, session) => {
-    if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session) {
-      if (_appStarted) return; // already running — token refresh, ignore
+    if (event === 'INITIAL_SESSION' && session) {
+      if (_appStarted) return;
       _appStarted = true;
       currentUser = session.user;
-      await loadProfile();
-      // Block unapproved non-admin users
+      try {
+        await loadProfile();
+      } catch(e) {
+        _appStarted = false; // reset so manual login can recover
+        return;
+      }
       if (currentProfile?.is_approved === false && currentProfile?.role !== 'admin') {
         await sb.auth.signOut();
         currentUser = null; currentProfile = null; _districtUids = null; _appStarted = false;
@@ -9654,9 +9671,14 @@ document.addEventListener('DOMContentLoaded', () => {
         if (errEl) { errEl.textContent = 'Your account is pending approval by an administrator.'; errEl.classList.remove('hidden'); }
         return;
       }
+      _appStarted = true;
       startApp();
     } else if (event === 'SIGNED_OUT') {
       _appStarted = false;
+      // Show login screen in case Supabase auto-signed-out
+      document.getElementById('app-shell')?.classList.add('hidden');
+      if (document.getElementById('app-shell')) document.getElementById('app-shell').style.display = '';
+      document.getElementById('auth-screen')?.classList.remove('hidden');
     }
   });
 });
