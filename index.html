@@ -9,7 +9,7 @@
 <script>
 // Auto cache-bust: if deployed version changed, force fresh load from server
 (function(){
-  var V='20260501-2';
+  var V='20260501-3';
   var k='cop_ams_ver';
   var stored=localStorage.getItem(k);
   if(stored!==V){
@@ -4769,22 +4769,16 @@ function reportContribFilter(q) {
   return q;
 }
 
-// Filter for journals table — uses district column (new entries) OR entered_by (legacy entries)
+// Filter for journals table — by entered_by (includes all district users, active + inactive)
 function reportJournalFilter(q) {
   const role = currentProfile?.role;
   const uid = myId();
   if (role === 'admin' && _rptUserFilter && _rptUserFilter !== 'all') {
-    if (_rptUserFilter === '__none__') return q.is('district', null);
-    // Match by district column (new) OR entered_by membership (legacy)
-    if (_rptDistrictUids && _rptDistrictUids.length > 0)
-      return q.or(`district.eq.${_rptUserFilter},entered_by.in.(${_rptDistrictUids.join(',')})`);
-    return q.eq('district', _rptUserFilter);
+    if (_rptDistrictUids && _rptDistrictUids.length > 0) return q.in('entered_by', _rptDistrictUids);
+    if (_rptDistrictUids && _rptDistrictUids.length === 0) return q.eq('entered_by', 'no-match');
+    return q;
   }
   if (role === 'admin') return q;
-  const myDistrict = currentProfile?.district;
-  if (myDistrict && _districtUids && _districtUids.length > 0)
-    return q.or(`district.eq.${myDistrict},entered_by.in.(${_districtUids.join(',')})`);
-  if (myDistrict && uid) return q.or(`district.eq.${myDistrict},entered_by.eq.${uid}`);
   if (_districtUids && _districtUids.length > 0) return q.in('entered_by', _districtUids);
   if (uid) return q.eq('entered_by', uid);
   return q;
@@ -5025,7 +5019,8 @@ async function printAllDistrictsReport() {
 async function getPostedJournals(from,to) {
   let q = sb.from('journals').select('*').eq('status','posted').gte('date',from).lte('date',to);
   q = reportJournalFilter(q);
-  const {data}=await q;
+  const {data, error}=await q;
+  if (error) { console.error('getPostedJournals error:', error.message); toast('Error loading journals: '+error.message,'error'); }
   return data||[];
 }
 async function getPostedContribs(from,to) {
@@ -5045,20 +5040,10 @@ function dashContribFilter(q) {
 }
 function dashJournalFilter(q) {
   if (currentProfile?.role === 'admin') return q;
-  const myDistrict = currentProfile?.district;
-  const uid = myId();
-  if (myDistrict && _districtUids && _districtUids.length > 0)
-    return q.or(`district.eq.${myDistrict},entered_by.in.(${_districtUids.join(',')})`);
-  if (myDistrict && uid) return q.or(`district.eq.${myDistrict},entered_by.eq.${uid}`);
   return withUser(q);
 }
 function dashDraftJournalFilter(q) {
   if (currentProfile?.role === 'admin') return q;
-  const myDistrict = currentProfile?.district;
-  const uid = myId();
-  if (myDistrict && _districtUids && _districtUids.length > 0)
-    return q.or(`district.eq.${myDistrict},entered_by.in.(${_districtUids.join(',')})`);
-  if (myDistrict && uid) return q.or(`district.eq.${myDistrict},entered_by.eq.${uid}`);
   return withUser(q);
 }
 
