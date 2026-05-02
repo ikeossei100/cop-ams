@@ -9,7 +9,7 @@
 <script>
 // Auto cache-bust: if deployed version changed, force fresh load from server
 (function(){
-  var V='20260502-1';
+  var V='20260502-2';
   var k='cop_ams_ver';
   var stored=localStorage.getItem(k);
   if(stored!==V){
@@ -5282,11 +5282,15 @@ async function genBalanceSheet(from,to) {
   const assets      = section(balAll,  1000, 1999, true);
   const liabilities = section(balAll,  2000, 2999, false);
   const fundBal     = section(balAll,  3000, 3999, false);
-  // Income (4xxx) and Expense (5xxx) — from live (non-import) journals so IS-IMPORT/OB-IMPORT don't double-count
-  const income      = section(balLive, 4000, 4999, false); // credit-normal → debitPositive=false
-  const expenses    = section(balLive, 5000, 5999, true);  // debit-normal  → debitPositive=true
 
-  const currentNet  = income.total - expenses.total;
+  // Current year net from LIVE (non-import) transactions only
+  let cyIncome = 0, cyExpense = 0;
+  Object.keys(balLive).forEach(code => {
+    const n = parseInt(code)||0, b = balLive[code];
+    if (n>=4000&&n<=4999) cyIncome  += (b.credit - b.debit);
+    if (n>=5000&&n<=5999) cyExpense += (b.debit  - b.credit);
+  });
+  const currentNet  = cyIncome - cyExpense;
   const totalEquity = liabilities.total + fundBal.total + currentNet;
   const diff        = assets.total - totalEquity;
   const balanced    = Math.abs(diff) < 0.02;
@@ -5314,13 +5318,13 @@ async function genBalanceSheet(from,to) {
     totalRow('Total Assets', assets.total, true) +
     '</tbody></table>';
 
-  // Liabilities + Fund Balance + Income + Expenses table
-  const surplusRow =
+  // Liabilities + Fund Balance table
+  const fbCyRow = Math.abs(currentNet) > 0.005 ?
     '<tr>' +
     '<td style="padding:4px 8px;font-family:monospace;font-size:12px;color:#374151;">—</td>' +
-    '<td style="padding:4px 8px;font-size:13px;font-style:italic;color:#1a3c8f;">Net Surplus / (Deficit)</td>' +
-    '<td style="padding:4px 8px;text-align:right;font-size:13px;font-weight:600;' + (currentNet<0?'color:#dc2626;':'color:#15803d;') + '">' + (currentNet<0?'(' + fmt(Math.abs(currentNet)) + ')':fmt(currentNet)) + '</td>' +
-    '</tr>';
+    '<td style="padding:4px 8px;font-size:13px;font-style:italic;">Current Year Surplus / (Deficit)</td>' +
+    '<td style="padding:4px 8px;text-align:right;font-size:13px;' + (currentNet<0?'color:#dc2626;':'') + '">' + (currentNet<0?'(' + fmt(Math.abs(currentNet)) + ')':fmt(currentNet)) + '</td>' +
+    '</tr>' : '';
 
   const equityTable =
     '<table style="' + tblStyle + '">' +
@@ -5330,20 +5334,14 @@ async function genBalanceSheet(from,to) {
     (liabilities.rows||'<tr><td colspan="3" style="padding:6px 8px;color:#9ca3af;font-size:12px;font-style:italic;">No entries</td></tr>') +
     totalRow('Total Liabilities', liabilities.total, false) +
     secHdr('Fund Balance') +
-    (fundBal.rows||'<tr><td colspan="3" style="padding:6px 8px;color:#9ca3af;font-size:12px;font-style:italic;">No entries</td></tr>') +
-    totalRow('Total Fund Balance', fundBal.total, false) +
-    secHdr('Income (Current Year)') +
-    (income.rows||'<tr><td colspan="3" style="padding:6px 8px;color:#9ca3af;font-size:12px;font-style:italic;">No income entries</td></tr>') +
-    totalRow('Total Income', income.total, false) +
-    secHdr('Expenses (Current Year)') +
-    (expenses.rows||'<tr><td colspan="3" style="padding:6px 8px;color:#9ca3af;font-size:12px;font-style:italic;">No expense entries</td></tr>') +
-    totalRow('Total Expenses', expenses.total, false) +
-    surplusRow +
+    (fundBal.rows||'') +
+    fbCyRow +
+    totalRow('Total Fund Balance', fundBal.total + currentNet, false) +
     totalRow('Total Liabilities & Fund Balance', totalEquity, true) +
     '</tbody></table>';
 
   // Cache structured data for clean PDF export
-  _bsReportCache = { to, assets, liabilities, fundBal, income, expenses, currentNet, totalEquity, balanced };
+  _bsReportCache = { to, assets, liabilities, fundBal, currentNet, totalEquity, balanced };
 
   document.getElementById('report-content').innerHTML =
     // Report header — Power Church style
@@ -7113,33 +7111,14 @@ async function exportReportPDF() {
       item.name,
       { content: fmt(item.net), styles: { halign: 'right' } },
     ]));
-    equityBody.push(bsTotRow('Total Fund Balance', bs.fundBal.total, false));
-
-    equityBody.push(bsSecRow('INCOME (CURRENT YEAR)'));
-    (bs.income?.items||[]).forEach(item => equityBody.push([
-      item.code,
-      item.name,
-      { content: fmt(item.net), styles: { halign: 'right' } },
-    ]));
-    if (!(bs.income?.items||[]).length) equityBody.push(['', { content: 'No income entries', styles: { fontStyle: 'italic', textColor: [156,163,175] } }, '']);
-    equityBody.push(bsTotRow('Total Income', bs.income?.total||0, false));
-
-    equityBody.push(bsSecRow('EXPENSES (CURRENT YEAR)'));
-    (bs.expenses?.items||[]).forEach(item => equityBody.push([
-      item.code,
-      item.name,
-      { content: fmt(item.net), styles: { halign: 'right' } },
-    ]));
-    if (!(bs.expenses?.items||[]).length) equityBody.push(['', { content: 'No expense entries', styles: { fontStyle: 'italic', textColor: [156,163,175] } }, '']);
-    equityBody.push(bsTotRow('Total Expenses', bs.expenses?.total||0, false));
-
     if (Math.abs(bs.currentNet) > 0.005) {
       equityBody.push([
         '—',
-        { content: 'Net Surplus / (Deficit)', styles: { fontStyle: 'italic', textColor: [26,60,143] } },
-        { content: bs.currentNet<0?'('+fmt(Math.abs(bs.currentNet))+')':fmt(bs.currentNet), styles: { halign: 'right', fontStyle: 'bold', textColor: bs.currentNet<0?[220,38,38]:[21,128,61] } },
+        { content: 'Current Year Surplus / (Deficit)', styles: { fontStyle: 'italic' } },
+        { content: bs.currentNet<0?'('+fmt(Math.abs(bs.currentNet))+')':fmt(bs.currentNet), styles: { halign: 'right', textColor: bs.currentNet<0?[220,38,38]:[0,0,0] } },
       ]);
     }
+    equityBody.push(bsTotRow('Total Fund Balance', bs.fundBal.total + bs.currentNet, false));
     equityBody.push(bsTotRow('Total Liabilities & Fund Balance', bs.totalEquity, true));
 
     doc.autoTable({ head, body: equityBody, startY: y, theme: 'striped',
