@@ -9,7 +9,7 @@
 <script>
 // Auto cache-bust: if deployed version changed, force fresh load from server
 (function(){
-  var V='20260503-1';
+  var V='20260503-2';
   var k='cop_ams_ver';
   var stored=localStorage.getItem(k);
   if(stored!==V){
@@ -826,28 +826,6 @@ tailwind.config = {
       <button class="btn-gold text-xs" onclick="exportJnlPDF()">Export PDF</button>
       <button class="btn-secondary text-xs" onclick="exportJnlCSV()">Export CSV</button>
       <button class="btn-primary text-xs role-entry-only" onclick="openJournalForm()">+ New Journal</button>
-    </div>
-  </div>
-  <!-- Draft entries panel — always visible when drafts exist for the month -->
-  <div id="jnl-draft-panel" style="display:none;" class="mb-4 rounded-xl overflow-hidden" style="border:1.5px solid #86efac;">
-    <div class="flex items-center justify-between px-4 py-2.5 flex-wrap gap-2" style="background:#f0fdf4;border-bottom:1.5px solid #bbf7d0;">
-      <div class="flex items-center gap-2">
-        <span style="font-size:1.1rem;">📋</span>
-        <span class="text-xs font-bold uppercase tracking-wide" style="color:#15803d;">Unposted Draft Entries —</span>
-        <span class="text-xs font-bold" style="color:#15803d;" id="jnl-draft-month-label"></span>
-        <span class="ml-1 text-xs px-2 py-0.5 rounded-full font-bold" style="background:#dcfce7;color:#15803d;" id="jnl-draft-count-badge">0</span>
-      </div>
-      <div class="flex items-center gap-2">
-        <span class="text-xs font-semibold" style="color:#15803d;" id="jnl-draft-total-label">$0.00 total debits</span>
-        <button onclick="jnlFilterDrafts()" class="btn-secondary text-xs">Filter table to drafts</button>
-        <button onclick="jnlShowAll()" class="btn-secondary text-xs">Show all</button>
-      </div>
-    </div>
-    <div class="overflow-x-auto" style="background:#fff;">
-      <table class="tbl">
-        <thead><tr><th>Date</th><th>Ref#</th><th>Type</th><th>Description</th><th class="text-right">Debit</th><th class="text-right">Credit</th><th>Actions</th></tr></thead>
-        <tbody id="jnl-draft-tbody"></tbody>
-      </table>
     </div>
   </div>
 
@@ -3971,16 +3949,12 @@ async function loadJournals() {
   const lastDay=new Date(parseInt(yr),parseInt(mo),0).getDate();
   const from=`${yr}-${mo}-01`,to=`${yr}-${mo}-${String(lastDay).padStart(2,'0')}`;
 
-  // Main table query (respects all filters)
+  // Single query — all entries for the month respecting all filters
   let q=withUser(sb.from('journals').select('*').gte('date',from).lte('date',to).order('date'));
   if (typeF) q=q.eq('type',typeF);
   if (statusF) q=q.eq('status',statusF);
 
-  // Draft-only query — always fetches drafts for the panel regardless of status filter
-  let dq=dashDraftJournalFilter(sb.from('journals').select('*').eq('status','draft').gte('date',from).lte('date',to).order('date'));
-  if (typeF) dq=dq.eq('type',typeF);
-
-  const [{data,error},{data:draftData}] = await Promise.all([q, dq]);
+  const {data,error} = await q;
   if (error) { toast('Failed to load journals: '+error.message,'error'); return; }
   journalData=data||[];
   _jnlSearchQ = '';
@@ -3994,50 +3968,8 @@ async function loadJournals() {
     _jnlDistrictFilter = districts.includes(prev) ? prev : '';
   }
   renderJournals();
-  renderJournalDraftPanel(draftData||[], month);
 }
 
-function renderJournalDraftPanel(drafts, month) {
-  const panel = document.getElementById('jnl-draft-panel');
-  if (!panel) return;
-  const role = currentProfile?.role || 'viewer';
-  const canPost = ['admin','accountant'].includes(role);
-  const canEnter = canPost || role === 'dataentry';
-
-  if (drafts.length === 0) { panel.style.display = 'none'; return; }
-  panel.style.display = 'block';
-
-  // Month label
-  const [yr,mo] = month.split('-');
-  const monthLabel = new Date(parseInt(yr), parseInt(mo)-1, 1).toLocaleString('en-CA',{month:'long',year:'numeric'});
-  const monthEl = document.getElementById('jnl-draft-month-label');
-  if (monthEl) monthEl.textContent = monthLabel;
-
-  // Count + total
-  const total = drafts.reduce((s,j)=>s+(parseFloat(j.total_debit)||0),0);
-  const countEl = document.getElementById('jnl-draft-count-badge');
-  if (countEl) countEl.textContent = `${drafts.length} entr${drafts.length===1?'y':'ies'}`;
-  const totalEl = document.getElementById('jnl-draft-total-label');
-  if (totalEl) totalEl.textContent = `${fmt(total)} total debits`;
-
-  // Rows
-  const rows = drafts.map(j=>`<tr style="background:#fafff8;">
-    <td>${j.date}</td>
-    <td>${j.ref_no||'—'}</td>
-    <td><span class="text-xs font-mono bg-gray-100 px-1 rounded">${j.type}</span></td>
-    <td class="max-w-xs truncate">${j.description}</td>
-    <td class="text-right">${fmt(j.total_debit)}</td>
-    <td class="text-right">${fmt(j.total_credit)}</td>
-    <td class="flex gap-1 text-xs flex-wrap">
-      <button class="text-blue-600 hover:underline" onclick="viewJournal('${j.id}')">View</button>
-      ${canEnter?`<button class="text-indigo-600 hover:underline" onclick="openJournalForm('${j.id}')">Edit</button>`:''}
-      ${canPost?`<button class="text-green-600 hover:underline font-semibold" onclick="postJournal('${j.id}')">Post</button>`:''}
-      ${canEnter?`<button class="text-red-500 hover:underline font-semibold" onclick="deleteJournal('${j.id}')">Delete</button>`:''}
-    </td>
-  </tr>`).join('');
-  const tbody = document.getElementById('jnl-draft-tbody');
-  if (tbody) tbody.innerHTML = rows;
-}
 
 function jnlFilterDrafts() {
   const sel = document.getElementById('jnl-filter-status');
