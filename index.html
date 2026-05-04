@@ -9,7 +9,7 @@
 <script>
 // Auto cache-bust: if deployed version changed, force fresh load from server
 (function(){
-  var V='20260503-3';
+  var V='20260503-4';
   var k='cop_ams_ver';
   var stored=localStorage.getItem(k);
   if(stored!==V){
@@ -224,6 +224,73 @@ tailwind.config = {
   }
   @media (min-width:641px) and (max-width:1024px) {
     #modal-box { max-height:94vh; max-width:44rem; }
+  }
+
+  /* ═══ TABLET & PHONE RESPONSIVENESS ═══ */
+
+  /* Tablet (iPad) — up to 1024px */
+  @media (max-width:1024px) {
+    #main-panel { padding: 14px 12px !important; }
+    /* All flex rows wrap */
+    .flex.gap-2, .flex.gap-3 { flex-wrap: wrap; }
+    /* Tables scroll horizontally */
+    .card.overflow-hidden { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .tbl { min-width: 520px; }
+    /* Inputs don't force a fixed width */
+    input[type=month], .w-40, .w-48 { min-width: 0; }
+  }
+
+  /* Phone — up to 640px */
+  @media (max-width:640px) {
+    #main-panel { padding: 10px 8px !important; }
+
+    /* Collapse ALL multi-col grids to single column */
+    .grid-cols-2, .grid-cols-3, .grid-cols-4,
+    [class*="grid-cols-2"], [class*="grid-cols-3"], [class*="grid-cols-4"] {
+      grid-template-columns: 1fr !important;
+    }
+    /* But keep 2-col grids that are side-by-side amount/date fields */
+    .grid.grid-cols-2.gap-3 { grid-template-columns: 1fr 1fr !important; }
+
+    /* Tighter tables */
+    .tbl { font-size: 0.72rem; min-width: 480px; }
+    .tbl th, .tbl td { padding: 6px 6px !important; }
+
+    /* Section header stacks */
+    .section-header { flex-direction: column; align-items: flex-start; gap: 8px; }
+    .section-title { font-size: 1rem; }
+
+    /* Hide period in top header — saves space */
+    #header-period, .w-px.h-5.bg-gray-200 { display: none !important; }
+
+    /* Filter/action bars stack */
+    .flex-shrink-0.flex.items-center.justify-between { flex-direction: column; align-items: flex-start; gap: 8px; }
+
+    /* Buttons full width in stacked rows */
+    .btn-primary, .btn-secondary, .btn-gold { white-space: nowrap; }
+
+    /* Report card grid — 1 col */
+    #screen-reports .grid { grid-template-columns: 1fr !important; }
+
+    /* Dashboard stat cards — 2 col max */
+    #screen-dashboard .grid-cols-4 { grid-template-columns: 1fr 1fr !important; }
+    #screen-dashboard .grid-cols-3 { grid-template-columns: 1fr 1fr !important; }
+
+    /* Modal full height on phone */
+    #modal-box { border-radius: 12px 12px 0 0; max-height: 96vh; }
+    #modal-overlay { align-items: flex-end; padding: 0; }
+
+    /* Auth screen */
+    #auth-screen > div { margin: 0; border-radius: 0; min-height: 100vh; }
+
+    /* Reduce card padding */
+    .card { padding: 12px !important; }
+    .card.p-4 { padding: 12px !important; }
+    .card.p-6 { padding: 14px !important; }
+
+    /* Top app header */
+    header.flex-shrink-0 { padding: 8px 10px; }
+    #page-title { font-size: 0.8rem; }
   }
 </style>
 </head>
