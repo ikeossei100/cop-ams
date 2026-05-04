@@ -9,7 +9,7 @@
 <script>
 // Auto cache-bust: if deployed version changed, force fresh load from server
 (function(){
-  var V='20260503-2';
+  var V='20260503-3';
   var k='cop_ams_ver';
   var stored=localStorage.getItem(k);
   if(stored!==V){
@@ -4298,6 +4298,7 @@ async function exportJnlPDF() {
   const printDate=new Date().toLocaleString('en-CA',{year:'numeric',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
   const logoB64 = await getLogoBase64();
 
+  const jnlDistrictLabel = getJnlDistrictLabel();
   function drawPageHeader(doc){
     doc.setFillColor(26,60,143);
     doc.rect(0,0,pageW,20,'F');
@@ -4307,10 +4308,11 @@ async function exportJnlPDF() {
     doc.setFont('helvetica','bold'); doc.setFontSize(13);
     doc.text('Church of Pentecost Canada Inc', hx, 9);
     doc.setFont('helvetica','normal'); doc.setFontSize(9);
-    doc.text('Journal Report', hx, 16);
-    doc.setFontSize(8);
-    doc.text(`Period: ${monthVal||'All'}`,pageW-marginR,9,{align:'right'});
-    doc.text(`Printed: ${printDate}`,pageW-marginR,16,{align:'right'});
+    doc.text(`Journal Report — ${jnlDistrictLabel}`, hx, 16);
+    doc.setFontSize(8); doc.setTextColor(180,200,255);
+    doc.text(`District: ${jnlDistrictLabel}`,pageW-marginR,9,{align:'right'});
+    doc.setTextColor(150,150,150);
+    doc.text(`Period: ${monthVal||'All'}  |  Printed: ${printDate}`,pageW-marginR,16,{align:'right'});
     // Gold underline
     doc.setDrawColor(255,215,0);
     doc.setLineWidth(0.8);
@@ -4679,6 +4681,20 @@ let _isReportCache = null;  // stores last IS data for clean PDF export
 let _bsReportCache = null; // stores last BS data for clean PDF export
 let _rptUserFilter = 'all'; // 'all' or a specific district name
 let _rptDistrictUids = null; // user IDs belonging to the selected district
+
+// Returns the district label for the current report context.
+// Non-admin: always their own district.
+// Admin: the district they have selected, or 'All Districts'.
+function getReportDistrictLabel() {
+  if (currentProfile?.role !== 'admin') return currentProfile?.district || '';
+  if (_rptUserFilter && _rptUserFilter !== 'all') return _rptUserFilter;
+  return 'All Districts';
+}
+// Same but for the journal page which uses its own district filter.
+function getJnlDistrictLabel() {
+  if (currentProfile?.role !== 'admin') return currentProfile?.district || '';
+  return _jnlDistrictFilter || 'All Districts';
+}
 
 // Call this before running reports when a district is selected
 async function loadRptDistrictUids(district) {
@@ -5311,6 +5327,7 @@ async function getLogoBase64() {
 // Draws the standard blue letterhead on any jsPDF doc — call once per page for single-page,
 // or use in didDrawPage for multi-page autoTable exports.
 async function drawPdfLetterhead(doc, pageW, line1, line2, printDate) {
+  const districtLabel = getReportDistrictLabel();
   const logoB64 = await getLogoBase64();
   doc.setFillColor(26,60,143); doc.rect(0,0,pageW,22,'F');
   if (logoB64) { try { doc.addImage(logoB64,'JPEG',3,1,20,20); } catch(e){} }
@@ -5318,9 +5335,11 @@ async function drawPdfLetterhead(doc, pageW, line1, line2, printDate) {
   doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(15);
   doc.text(line1 || 'Church of Pentecost Canada Inc', txX, 10);
   doc.setFont('helvetica','normal'); doc.setFontSize(11);
-  doc.text(line2 || 'Head Office — General Fund', txX, 16);
-  doc.setFontSize(10); doc.setTextColor(150,150,150);
-  doc.text(printDate || `Printed: ${new Date().toLocaleString('en-CA')}`, pageW-14, 10, {align:'right'});
+  doc.text(line2 || (districtLabel && districtLabel !== 'All Districts' ? `${districtLabel} — General Fund` : 'Head Office — General Fund'), txX, 16);
+  doc.setFontSize(9); doc.setTextColor(180,200,255);
+  doc.text(`District: ${districtLabel}`, pageW-14, 10, {align:'right'});
+  doc.setFontSize(8); doc.setTextColor(150,150,150);
+  doc.text(printDate || `Printed: ${new Date().toLocaleString('en-CA')}`, pageW-14, 17, {align:'right'});
 }
 
 async function exportNationalPDF() {
