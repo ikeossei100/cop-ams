@@ -9,7 +9,7 @@
 <script>
 // Auto cache-bust: if deployed version changed, force fresh load from server
 (function(){
-  var V='20260503-4';
+  var V='20260503-5';
   var k='cop_ams_ver';
   var stored=localStorage.getItem(k);
   if(stored!==V){
@@ -233,9 +233,10 @@ tailwind.config = {
     #main-panel { padding: 14px 12px !important; }
     /* All flex rows wrap */
     .flex.gap-2, .flex.gap-3 { flex-wrap: wrap; }
-    /* Tables scroll horizontally */
-    .card.overflow-hidden { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-    .tbl { min-width: 520px; }
+    /* Any remaining card+table combos scroll horizontally */
+    .card.overflow-hidden { overflow-x: auto !important; -webkit-overflow-scrolling: touch; }
+    /* Explicit scroll wrappers */
+    div[style*="overflow-x:auto"] { -webkit-overflow-scrolling: touch; }
     /* Inputs don't force a fixed width */
     input[type=month], .w-40, .w-48 { min-width: 0; }
   }
@@ -848,11 +849,13 @@ tailwind.config = {
       </div>
     </div>
   </div>
-  <div class="card overflow-hidden">
-    <table class="tbl">
-      <thead><tr><th class="w-8"></th><th>Date</th><th>Ref#</th><th>Envelope</th><th>Contributor</th><th>Account</th><th>Description</th><th>District</th><th>Amount</th><th>Status</th><th>Actions</th></tr></thead>
-      <tbody id="contrib-tbody"><tr><td colspan="9" class="text-center py-8 text-gray-400">Select a month to load contributions.</td></tr></tbody>
-    </table>
+  <div class="card" style="padding:0;">
+    <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
+      <table class="tbl" style="min-width:700px;">
+        <thead><tr><th class="w-8"></th><th>Date</th><th>Ref#</th><th>Envelope</th><th>Contributor</th><th>Account</th><th>Description</th><th>District</th><th>Amount</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody id="contrib-tbody"><tr><td colspan="11" class="text-center py-8 text-gray-400">Select a month to load contributions.</td></tr></tbody>
+      </table>
+    </div>
   </div>
   <div class="flex justify-end mt-3 gap-4 text-sm text-gray-600">
     <span>Total: <strong id="contrib-total" class="text-gray-900">$0.00</strong></span>
@@ -896,11 +899,13 @@ tailwind.config = {
     </div>
   </div>
 
-  <div class="card overflow-hidden">
-    <table class="tbl">
-      <thead><tr><th>Date</th><th>Ref#</th><th>Type</th><th>Description</th><th>Debit</th><th>Credit</th><th>Status</th><th>Actions</th></tr></thead>
-      <tbody id="jnl-tbody"><tr><td colspan="8" class="text-center py-8 text-gray-400">Select a month to load journals.</td></tr></tbody>
-    </table>
+  <div class="card" style="padding:0;">
+    <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
+      <table class="tbl" style="min-width:600px;">
+        <thead><tr><th>Date</th><th>Ref#</th><th>Type</th><th>Description</th><th>Debit</th><th>Credit</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody id="jnl-tbody"><tr><td colspan="8" class="text-center py-8 text-gray-400">Select a month to load journals.</td></tr></tbody>
+      </table>
+    </div>
   </div>
 </div>
 
